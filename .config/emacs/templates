@@ -1,0 +1,124 @@
+;; -*- mode: emacs-lisp -*-
+
+;; Templates are defined on a per-major-mode basis. The name of a mode
+;; alone on a line starts templates for that major mode. See the
+;; documentation for tempel for more details.
+;;
+;; Template syntax:
+;;
+;; "string" Inserts a string literal.
+;; p Inserts an unnamed placeholder field.
+;; n Inserts a newline.
+;; > Indents with indent-according-to-mode.
+;; r Inserts the current region. If no region is active, quits the containing template when jumped to.
+;; r> Acts like r, but indent region.
+;; n> Inserts a newline and indents.
+;; & Insert newline unless there is only whitespace between line start and point.
+;; % Insert newline unless there is only whitespace between point and line end.
+;; o Like % but leaves the point before newline.
+;; (s NAME) Inserts a named field.
+;; (p PROMPT <NAME> <NOINSERT>) Insert an optionally named field with a prompt. The PROMPT is displayed directly in the buffer as default value. If NOINSERT is non-nil, no field is inserted. Then the minibuffer is used for prompting and the value is bound to NAME.
+;; (r PROMPT <NAME> <NOINSERT>) Insert region or act like (p ...).
+;; (r> PROMPT <NAME> <NOINSERT>) Act like (r ...), but indent region.
+;;
+;; (p FORM <NAME> <NOINSERT>) Like p described above, but FORM is evaluated.
+;; (FORM ...) Other Lisp forms are evaluated. Named fields are lexically bound.
+;; q Quits the containing template when jumped to.
+
+rust-mode rust-ts-mode rustic-mode php-mode php-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode js-ts-mode js-mode js2-mode mongo-mode go-mode go-ts-mode scala-ts-mode scala-mode swift-mode swift-ts-mode
+
+;; ============================================
+;; ANNOTATIONS WITH DOUBLE SLASH
+;; ============================================
+
+(fixme "// FIXME: " p)
+(todo "// TODO: " p)
+(bug "// BUG: " p)
+(hack "// HACK: " p)
+(working "// WORKING HERE: " p)
+
+
+python-mode python-ts-mode redis-mode dockerfile-mode terraform-mode ansible-mode
+
+;; ============================================
+;; ANNOTATIONS WITH HASH
+;; ============================================
+
+(fixme "# FIXME: " p)
+(todo "# TODO: " p)
+(bug "# BUG: " p)
+(hack "# HACK: " p)
+(working "# WORKING HERE: " p)
+
+
+sql-mode sql-ts-mode
+
+;; ============================================
+;; ANNOTATIONS WITH DOUBLE DASH
+;; ============================================
+
+(fixme "-- FIXME: " p)
+(todo "-- TODO: " p)
+(bug "-- BUG: " p)
+(hack "-- HACK: " p)
+(working "-- WORKING HERE: " p)
+
+
+html-mode web-mode
+
+;; ============================================
+;; ANNOTATIONS FOR HTML
+;; ============================================
+
+(fixme "")
+(todo "")
+(bug "")
+(hack "")
+(working "")
+
+
+css-mode css-ts-mode
+
+;; ============================================
+;; ANNOTATIONS FOR CSS
+;; ============================================
+
+(fixme "/* FIXME: " p " */")
+(todo "/* TODO: " p " */")
+(bug "/* BUG: " p " */")
+(hack "/* HACK: " p " */")
+(working "/* WORKING HERE: " p " */")
+
+
+web-mode twig-mode
+
+;; ============================================
+;; ANNOTATIONS FOR TWIG
+;; ============================================
+
+(fixme "{# FIXME: " p " #}")
+(todo "{# TODO: " p " #}")
+(bug "{# BUG: " p " #}")
+(hack "{# HACK: " p " #}")
+(working "{# WORKING HERE: " p " #}")
+
+text-mode git-commit-mode
+
+;; ============================================
+;; CONVENTIONAL COMMITS
+;; ============================================
+
+(feat "feat(" p "): " p)
+(fix "fix(" p "): " p)
+(docs "docs(" p "): " p)
+(style "style(" p "): " p)
+(ref "refactor(" p "): " p)
+(perf "perf(" p "): " p)
+(test "test(" p "): " p)
+(chore "chore(" p "): " p)
+
+
+;; Local Variables:
+;; mode: lisp-data
+;; outline-regexp: "[a-z]"
+;; End:
