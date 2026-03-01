@@ -48,6 +48,7 @@
 (defvar jmc-jump-map)
 
 (declare-function projectile-mode "projectile")
+(declare-function projectile-project-root "projectile")
 (declare-function treemacs-follow-mode "treemacs")
 (declare-function treemacs-filewatch-mode "treemacs")
 (declare-function treemacs-fringe-indicator-mode "treemacs")
@@ -175,19 +176,34 @@
 (define-key jmc-jump-map (kbd "r") 'projectile-run-vterm)        ; Launch terminal at root.
 
 ;; 4. Treemacs Shortcuts (UI Controls)
+(defun jmc-find-top-git-root (dir)
+  "Walk up from DIR to find the topmost git repository root.
+Returns the topmost directory containing a .git entry, or nil."
+  (let ((top nil)
+        (current (directory-file-name (expand-file-name dir))))
+    (while (not (string= current (file-name-directory current)))
+      (when (file-exists-p (expand-file-name ".git" current))
+        (setq top current))
+      (setq current (directory-file-name (file-name-directory current))))
+    top))
+
 (defun jmc-treemacs-smart-toggle ()
-  "Toggle treemacs: close if open, or open and find the current file."
+  "Toggle Treemacs open or closed.
+When opening, display the topmost git root and navigate to the current file."
   (interactive)
-  ;; LAZY LOAD FIX: Force Emacs to load Treemacs right now if it hasn't already.
   (require 'treemacs)
-  
+
   (if (eq (treemacs-current-visibility) 'visible)
       (delete-window (treemacs-get-local-window))
-    (let ((file-path (buffer-file-name)))
-      (treemacs-add-and-display-current-project-exclusively)
+    (let* ((file-path (buffer-file-name))
+           (start-dir (or (and file-path (file-name-directory file-path))
+                          default-directory))
+           (top-root (or (jmc-find-top-git-root start-dir)
+                         (projectile-project-root))))
+      ;; Temporarily override projectile's root so Treemacs picks up the top-level repo
+      (cl-letf (((symbol-function 'projectile-project-root) (lambda (&rest _) top-root)))
+        (treemacs-add-and-display-current-project-exclusively))
       (if file-path
-          ;; RACE CONDITION FIX: Give Treemacs 0.1s to finish rendering
-          ;; before searching for the specific file node.
           (run-with-idle-timer 0.1 nil
                                (lambda ()
                                  (when (treemacs-get-local-window)
