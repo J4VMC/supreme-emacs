@@ -203,6 +203,15 @@
 ;; LANGUAGE SERVER EXTENSIONS
 ;; =============================================================================
 
+;; --- Java (Eclipse JDTLS) ---
+(use-package lsp-java
+  :ensure t
+  :defer t
+  :after lsp-mode
+  :hook (java-ts-mode . (lambda ()
+                          (require 'lsp-java)
+                          (lsp-deferred))))
+
 ;; --- ESLint (JS/TS) ---
 (use-package lsp-eslint
   :defer t

@@ -24,6 +24,12 @@
 ;;; Code:
 
 ;; =============================================================================
+;; COMPILER DECLARATIONS (SILENCE WARNINGS)
+;; =============================================================================
+
+(defvar combobulate-key-prefix)
+
+;; =============================================================================
 ;; CORE TREE-SITTER SETUP (TREESIT)
 ;; =============================================================================
 
@@ -41,6 +47,7 @@
     (dolist (grammar
              '((css        . ("https://github.com/tree-sitter/tree-sitter-css"))
                (go         . ("https://github.com/tree-sitter/tree-sitter-go"))
+	       (java       . ("https://github.com/tree-sitter/tree-sitter-java"))
                (html       . ("https://github.com/tree-sitter/tree-sitter-html"))
                (javascript . ("https://github.com/tree-sitter/tree-sitter-javascript" "master" "src"))
                (json       . ("https://github.com/tree-sitter/tree-sitter-json"))
@@ -71,6 +78,7 @@
   (dolist (mapping
            '((python-mode     . python-ts-mode)
              (css-mode        . css-ts-mode)
+	     (java-mode . java-ts-mode)
              (typescript-mode . typescript-ts-mode)
              (js2-mode        . js-ts-mode)
              (bash-mode       . bash-ts-mode)

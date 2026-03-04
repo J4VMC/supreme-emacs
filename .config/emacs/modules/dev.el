@@ -124,6 +124,10 @@
   (setf (alist-get 'phpcs-psr12 apheleia-formatters)
         '("phpcbf" "--standard=PSR12" "--stdin-path=" (or buffer-file-name "stdin")))
 
+  ;; Java: Use Google Java Format
+  (setf (alist-get 'google-java-format apheleia-formatters)
+        '("google-java-format" "-"))
+
   ;; Python: Use `ruff`, a blazingly fast modern Python linter/formatter.
   (setf (alist-get 'ruff apheleia-formatters)
         '("ruff" "format" "--stdin-filename" filepath "-"))
@@ -152,6 +156,10 @@
 
   ;; PHP
   (setf (alist-get 'php-ts-mode apheleia-mode-alist) 'phpcs-psr12)
+
+  ;; Java
+  (setf (alist-get 'java-mode apheleia-mode-alist) 'google-java-format)
+  (setf (alist-get 'java-ts-mode apheleia-mode-alist) 'google-java-format)
 
   ;; Python (covers both standard and Tree-sitter modes)
   (setf (alist-get 'python-mode apheleia-mode-alist) 'ruff)
