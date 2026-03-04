@@ -25,7 +25,7 @@
 ;; (FORM ...) Other Lisp forms are evaluated. Named fields are lexically bound.
 ;; q Quits the containing template when jumped to.
 
-rust-mode rust-ts-mode rustic-mode php-mode php-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode js-ts-mode js-mode js2-mode mongo-mode go-mode go-ts-mode scala-ts-mode scala-mode swift-mode swift-ts-mode
+rust-mode rust-ts-mode rustic-mode php-mode php-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode js-ts-mode js-mode js2-mode mongo-mode go-mode go-ts-mode scala-ts-mode scala-mode swift-mode swift-ts-mode java-mode java-ts-mode
 
 ;; ============================================
 ;; ANNOTATIONS WITH DOUBLE SLASH

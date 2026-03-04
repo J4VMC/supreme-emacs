@@ -210,7 +210,7 @@
   :init
   ;; Define which variables to import from the shell.
   (setq exec-path-from-shell-arguments '("-l"))
-  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "VIRTUAL_ENV" "PYTHONPATH" "LEFTHOOK_CONFIG"))
+  (setq exec-path-from-shell-variables '("PATH" "MANPATH" "VIRTUAL_ENV" "PYTHONPATH" "LEFTHOOK_CONFIG" "JAVA_HOME"))
   :config
   ;; Apply the variables only in graphical Emacs.
   ;; -> Terminal Emacs (`emacs -nw`) inherits the correct environment automatically.
