@@ -97,16 +97,16 @@
 
   :config
   ;; Set the default shell path.
-  (setq vterm-shell (executable-find "fish"))
+  (setq vterm-shell (or (executable-find "fish") (getenv "SHELL") "/bin/bash"))
 
   ;; --- Directory & File Integration ---
   ;; This allows the shell to "talk" to Emacs. If the shell sends a specific
   ;; escape sequence, Emacs will execute the corresponding function.
   (setq vterm-eval-cmds '(("find-file" find-file)
-                          ("message" message)
-                          ("vterm-clear-scrollback" vterm-clear-scrollback)
-                          ("dired" dired)
-                          ("ediff-files" ediff-files)))
+			  ("message" message)
+			  ("vterm-clear-scrollback" vterm-clear-scrollback)
+			  ("dired" dired)
+			  ("ediff-files" ediff-files)))
 
   ;; Automatically close the Emacs window/buffer when you type `exit` in the shell.
   (setq vterm-kill-buffer-on-exit t)
@@ -120,12 +120,12 @@
 
   ;; Bind `M-k` (Alt-k) to force-kill the terminal immediately.
   (define-key vterm-mode-map (kbd "M-k")
-              (lambda ()
+	      (lambda ()
                 (interactive)
                 (let ((buffer (current-buffer)))
-                  ;; Silence the "Process is running" exit prompt.
-                  (set-process-query-on-exit-flag (get-buffer-process buffer) nil)
-                  (jmc-kill-buffer-and-its-windows buffer))))
+		  ;; Silence the "Process is running" exit prompt.
+		  (set-process-query-on-exit-flag (get-buffer-process buffer) nil)
+		  (jmc-kill-buffer-and-its-windows buffer))))
 
   ;; Make URLs and file paths inside the terminal clickable.
   (add-hook 'vterm-mode-hook 'goto-address-mode))
@@ -177,7 +177,7 @@
        (let ((buffer (get-buffer buffer-or-name)))
          (with-current-buffer buffer
            (or (equal major-mode 'vterm-mode)
-               (string-prefix-p vterm-buffer-name (buffer-name buffer))))))
+	       (string-prefix-p vterm-buffer-name (buffer-name buffer))))))
      (display-buffer-reuse-window display-buffer-in-direction)
      (direction . bottom)
      (dedicated . t)
@@ -196,12 +196,12 @@
            (default-directory
             (if vterm-toggle-project-root
                 (jmc-project-root)
-              default-directory)))
+	      default-directory)))
       (if vterm-toggle-fullscreen-p
           (vterm buffer-name)
         (if (eq major-mode 'vterm-mode)
             (let ((display-buffer-alist nil))
-              (vterm buffer-name))
+	      (vterm buffer-name))
           (vterm-other-window buffer-name)))))
 
   (defun vterm-toggle--project-root ()
