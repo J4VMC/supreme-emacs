@@ -232,7 +232,11 @@
   :ensure t
   :config
   ;; Example: Hide 'Eldoc Mode' since it is almost always active.
-  (diminish 'eldoc-mode))
+  (diminish 'eldoc-mode)
+  (diminish 'eldoc-mode)
+  (diminish 'visual-line-mode)   ; " Wrap"
+  (diminish 'auto-revert-mode)   ; " ARev"
+  (diminish 'cua-mode))          ; " CUA"
 
 ;; Install and apply the Gruvbox theme.
 (use-package gruvbox-theme
@@ -292,6 +296,7 @@
 (use-package gcmh
   :ensure t
   :hook (emacs-startup . gcmh-mode)
+  :diminish gcmh-mode
   :config
   ;; Set the "typing" threshold to a high number (e.g., 100MB)
   (setq gcmh-high-cons-threshold (* 100 1024 1024))

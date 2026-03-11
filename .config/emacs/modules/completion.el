@@ -85,6 +85,7 @@
 ;; -> Replaces the default, clunky grid with a clean, fast, vertical list.
 (use-package vertico
   :ensure t
+  :diminish vertico-mode
   :init
   (vertico-mode) ; Enable the vertical UI globally.
   (vertico-multiform-mode)
@@ -136,6 +137,7 @@
 ;; -> `describe-function` shows the function's documentation string.
 (use-package marginalia
   :ensure t
+  :diminish marginalia-mode
   :after vertico
   :init (marginalia-mode))
 
@@ -211,6 +213,7 @@
 ;; -> A clean, fast, and minimal pop-up that appears directly next to your cursor.
 (use-package corfu
   :ensure t
+  :diminish corfu-mode
   :init
   (global-corfu-mode) ; Enable autocomplete globally.
   :custom

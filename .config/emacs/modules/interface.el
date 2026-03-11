@@ -499,6 +499,7 @@
 (use-package dimmer
   :ensure t
   :defer t
+  :diminish dimmer-mode
   :config
   (setq dimmer-mode t))
 

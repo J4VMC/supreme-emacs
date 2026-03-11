@@ -141,6 +141,7 @@
 ;; -> Makes deeply nested Lisp, JSON, or JavaScript much easier to read.
 (use-package rainbow-delimiters
   :ensure t
+  :diminish rainbow-delimiters-mode
   :hook ((prog-mode . rainbow-delimiters-mode)
          (text-mode . rainbow-delimiters-mode)
          (markdown-mode . rainbow-delimiters-mode)))
@@ -155,6 +156,7 @@
 ;; Draws vertical lines to visualize code indentation blocks (crucial for Python/YAML).
 (use-package highlight-indent-guides
   :ensure t
+  :diminish highlight-indent-guides-mode
   :hook (prog-mode . highlight-indent-guides-mode)
   :custom
   (highlight-indent-guides-method 'fill)
@@ -178,12 +180,14 @@
 ;; Renders `^L` (form feed) characters as clean horizontal divider lines.
 (use-package page-break-lines
   :ensure t
+  :diminish page-break-lines-mode
   :config (global-page-break-lines-mode))
 
 ;; Automatically strip trailing whitespace from lines when saving a file.
 (use-package whitespace-cleanup-mode
   :ensure (:host github :repo "purcell/whitespace-cleanup-mode")
   :defer t
+  :diminish whitespace-cleanup-mode
   :hook (prog-mode . whitespace-cleanup-mode)
   :config (setq whitespace-cleanup-mode-preserve-point t))
 
@@ -204,6 +208,7 @@
 ;; Makes copy/cut commands apply to the *entire current line* if no text is highlighted.
 (use-package whole-line-or-region
   :ensure t
+  :diminish whole-line-or-region-local-mode
   :config (whole-line-or-region-global-mode t))
 
 ;; `multiple-cursors`: VS Code-style multi-caret editing.
@@ -230,6 +235,7 @@
 (use-package drag-stuff
   :ensure t
   :defer 1
+  :diminish drag-stuff-mode
   :config
   (drag-stuff-global-mode 1)
   (drag-stuff-define-keys))
