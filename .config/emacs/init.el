@@ -360,4 +360,9 @@ Return nil if file is missing or unreadable."
           (lambda ()
             (run-with-idle-timer 60 nil #'jmc-elpaca-daily-update-h)))
 
+;; Reset GC to default (800kb) after startup finishes.
+(add-hook 'emacs-startup-hook
+          (lambda ()
+            (setq gc-cons-threshold 800000)))
+
 ;;; init.el ends here
