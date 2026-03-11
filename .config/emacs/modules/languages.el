@@ -390,8 +390,6 @@
 ;; This configuration uses `pandoc` to convert Markdown to HTML and renders it
 ;; in a local `eww` browser buffer that updates automatically as you type.
 
-(setq exec-path (append '("/usr/local/bin") exec-path))
-
 (use-package markdown-mode
   :ensure t
   :hook ((markdown-mode . flycheck-mode)
