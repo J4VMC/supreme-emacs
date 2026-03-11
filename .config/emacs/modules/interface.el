@@ -139,10 +139,6 @@
 ;; -> Creates a modern, layered aesthetic when overlapping windows.
 (add-to-list 'default-frame-alist '(alpha-background . 70))
 
-;; Explicitly set default font size again for redundancy.
-;; -> Ensures the setting persists across theme changes.
-(set-face-attribute 'default nil :height 150)
-
 ;; Use a horizontal bar cursor instead of the default block.
 ;; -> Other options: 'block', 'box', '(bar . WIDTH)'.
 ;; -> The horizontal bar is less visually intrusive.
@@ -309,8 +305,6 @@
 ;; =============================================================================
 ;; The dashboard replaces the default *scratch* buffer with a modern,
 ;; graphical welcome screen showing recent files and projects.
-
-(provide 'ffap)
 
 (use-package dashboard
   :ensure t
