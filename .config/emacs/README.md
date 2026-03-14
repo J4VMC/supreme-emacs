@@ -11,7 +11,7 @@ A modern, IDE-like Emacs configuration for software development. This setup prov
 * **Auto-formatting**: Your code formats automatically when you save (Apheleia)
 * **Error Checking**: See errors and warnings as you type (Flycheck)
 * **Offline Documentation**: Blazing fast doc lookups (Dash-docs)
-* **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Swift, Scala, and more
+* **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Java, Swift, Scala, Shell, SQL, MongoDB, Terraform, and more
 
 ## Prerequisites
 
@@ -76,11 +76,9 @@ brew install ripgrep fd git libgccjit libvterm imagemagick
 
 ```
 
-That's it! The configuration is already set up to use it automatically.
-
 ### Step 4: Install Language-Specific Tools
 
-Install tools only for languages you'll use. You can always come back and add more later.
+Install tools only for the languages you'll use. The configuration automatically detects and connects to them if they are installed on your system.
 
 ---
 
@@ -100,11 +98,12 @@ brew install openssl readline sqlite3 xz tcl-tk libb2 zstd zlib pkgconfig
 
 # Install Python
 pyenv install $(pyenv latest -k 3) && pyenv global $(pyenv latest 3)
+
 # Install Pipx if not already installed
 brew install pipx
 
 # Install Python development tools
-pipx install basedpyright ruff      # Language server (autocomplete, go-to-definition)
+pipx install basedpyright ruff      # Language server & Linter/Formatter
 
 # Add all of them to the path
 fish_add_path ~/.local/bin
@@ -114,37 +113,24 @@ pipx install poetry
 
 ```
 
-**Test it works:**
-
-```bash
-which ruff  # Should show a path
-
-```
-
 ---
 
-#### JavaScript/TypeScript/React/Vue/Svelte
+#### JavaScript / TypeScript / Web Technologies
+
+*(This also covers automatic Prettier formatting for HTML, CSS, JSON, YAML, and Markdown)*
 
 ```bash
-# Install Node.js and npm
+# Install Node.js and npm via Fisher (if using Fish)
 fisher install jorgebucaran/nvm.fish
-
 nvm install lts
 
 # Install JavaScript/TypeScript tools
 npm install -g typescript                    # TypeScript compiler
 npm install -g typescript-language-server    # Language server
-npm install -g prettier                      # Code formatter
+npm install -g prettier                      # Universal Code formatter
 npm install -g eslint                        # Linter
-npm install -g vscode-langservers-extracted # ESLint Language server
-npm install -g @tailwindcss/language-server  # For Tailwind CSS support
-
-```
-
-**Test it works:**
-
-```bash
-which typescript-language-server  # Should show a path
+npm install -g vscode-langservers-extracted  # ESLint Language server
+npm install -g @tailwindcss/language-server  # Tailwind CSS support
 
 ```
 
@@ -157,19 +143,12 @@ which typescript-language-server  # Should show a path
 brew install go
 
 # Install Go development tools
-go install golang.org/x/tools/gopls@latest              # Language server
-go install golang.org/x/tools/cmd/goimports@latest      # Formatter
+go install golang.org/x/tools/gopls@latest                             # Language server
+go install golang.org/x/tools/cmd/goimports@latest                     # Formatter
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest  # Linter
 
 # Add GOPATH to PATH
 fish_add_path (go env GOPATH)/bin
-
-```
-
-**Test it works:**
-
-```bash
-ls (go env GOPATH)/bin/gopls # Should show a path like /Users/you/go/bin/gopls
 
 ```
 
@@ -186,15 +165,8 @@ source "$HOME/.cargo/env.fish"
 
 # Install Rust development tools (these come with rustup)
 rustup component add rust-analyzer  # Language server
-rustup component add rustfmt         # Formatter
-rustup component add clippy          # Linter
-
-```
-
-**Test it works:**
-
-```bash
-which rust-analyzer  # Should show a path in ~/.cargo/bin
+rustup component add rustfmt        # Formatter
+rustup component add clippy         # Linter
 
 ```
 
@@ -203,42 +175,49 @@ which rust-analyzer  # Should show a path in ~/.cargo/bin
 #### PHP
 
 ```bash
-# Install PHP
-brew install php
-
-# Install Composer (PHP package manager)
-brew install composer
+# Install PHP & Composer
+brew install php composer
 
 # Install PHP development tools
-npm install -g intelephense  # Language server
-composer global require squizlabs/php_code-sniffer     # Code style checker
+npm install -g intelephense                            # Language server
+composer global require squizlabs/php_code-sniffer     # Code style checker (phpcbf)
 composer global require "dealerdirect/phpcodesniffer-composer-installer"
 phpcs --config-set --default_standard PSR12
-composer global require phpstan/phpstan               # Static analyzer
+composer global require phpstan/phpstan                # Static analyzer
+composer global require phpunit/phpunit                # Testing framework
 
-# PHP unit testing
-composer global require phpunit/phpunit
-
-```
-
-```bash
 # Add Composer to Path
 fish_add_path (composer global config bin-dir --absolute)
 
 ```
 
-*Test it works:*
+---
+
+#### Java
 
 ```bash
-which phpcs  # Should show a path
+# Install Java Development Kit and Google's Formatter
+brew install openjdk google-java-format
+
+# Note: The Java Language Server (Eclipse JDTLS) will automatically 
+# download and install itself via lsp-java on first launch.
+
+```
+
+---
+
+#### Shell Scripting (Bash / Zsh / Fish)
+
+```bash
+# Install Shell development tools
+brew install shellcheck shfmt        # Linter and Formatter
+npm install -g bash-language-server  # Language server
 
 ```
 
 ---
 
 #### Swift
-
-Swift tools come with Xcode:
 
 ```bash
 # Install Xcode Command Line Tools
@@ -250,14 +229,7 @@ brew install swift-format   # Formatter
 
 ```
 
-**Test it works:**
-
-```bash
-which swift  # Should show /usr/bin/swift
-
-```
-
-Note: For the Swift LSP server, you need the full Xcode app installed (not just command line tools). Download it from the Mac App Store.
+*(Note: For the Swift LSP server to work, you need the full Xcode app installed from the Mac App Store).*
 
 ---
 
@@ -271,88 +243,48 @@ brew install openjdk
 brew install coursier/formulas/coursier
 
 # Install Scala and development tools
-cs setup  # This installs scala, sbt, and other tools
+cs setup  
 
-# Install Metals (Scala language server)
-cs install metals
-
-```
-
-**Test it works:**
-
-```bash
-which metals  # Should show a path
+# Install Metals (Scala language server) and Formatter
+cs install metals scalafmt
 
 ```
 
 ---
 
-#### SQL
+#### Databases (SQL, MongoDB, Redis)
 
 ```bash
 # Install SQL formatter, linter, and language server
-npm install -g sqlint
-npm install -g sql-language-server
-npm install -g sql-formatter
+npm install -g sqlint sql-language-server sql-formatter
 
-# Optional: Install PostgreSQL client for testing
-brew install postgresql@18
-
-```
-
-**Test it works:**
-
-```bash
-which sqlint  # Should show a path
+# Install MongoDB shell and Redis CLI
+brew install mongosh redis
 
 ```
 
 ---
 
-#### Docker
+#### DevOps (Docker & Terraform)
 
 ```bash
-# Install Docker Desktop (includes Docker CLI)
-# Download the installer from: https://desktop.docker.com/mac/main/arm64/Docker.dmg
+# Install Docker Desktop for Mac
+# Download from: https://desktop.docker.com/mac/main/arm64/Docker.dmg
 
-# Start Docker Desktop from Applications folder
-
-# Install Dockerfile linter
-brew install hadolint
-
-```
-
-**Test it works:**
-
-```bash
-which docker    # Should show a path
-which hadolint  # Should show a path
+# Install Docker & Terraform tooling
+brew install hadolint terraform
 
 ```
 
 ---
 
-#### Markdown
+#### Document Formats (Markdown & XML)
 
 ```bash
-# Install Pandoc (for Markdown preview)
+# Install Pandoc (for Markdown live-preview rendering)
 brew install pandoc
 
-```
-
-**Test it works:**
-
-```bash
-which pandoc  # Should show a path
-
-```
-
----
-
-#### XML
-
-```bash
-# Install libxml2, which provides the xmllint formatting tool
+# Install libxml2 (provides xmllint for XML formatting)
 brew install libxml2
 
 ```
