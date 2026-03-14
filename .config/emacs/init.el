@@ -233,7 +233,6 @@
   :config
   ;; Example: Hide 'Eldoc Mode' since it is almost always active.
   (diminish 'eldoc-mode)
-  (diminish 'eldoc-mode)
   (diminish 'visual-line-mode)   ; " Wrap"
   (diminish 'auto-revert-mode)   ; " ARev"
   (diminish 'cua-mode))          ; " CUA"
