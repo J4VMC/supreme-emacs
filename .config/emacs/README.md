@@ -4,13 +4,14 @@ A modern, IDE-like Emacs configuration for software development. This setup prov
 
 ## What You'll Get
 
-- **Smart Code Completion**: Like IntelliSense in VS Code
-- **Syntax Highlighting**: Powered by tree-sitter (faster and more accurate)
-- **Project Navigation**: File tree sidebar, fuzzy file search
-- **Git Integration**: Visual Git interface (Magit)
-- **Auto-formatting**: Your code formats automatically when you save
-- **Error Checking**: See errors and warnings as you type
-- **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Swift, Scala, and more
+* **Smart Code Completion**: Like IntelliSense in VS Code (Corfu + Cape)
+* **Syntax Highlighting**: Powered by tree-sitter (faster and more accurate)
+* **Project Navigation**: File tree sidebar (Treemacs) and fuzzy file search (Consult + Vertico)
+* **Git Integration**: Visual Git interface (Magit) with GitHub/GitLab PR integration (Forge)
+* **Auto-formatting**: Your code formats automatically when you save (Apheleia)
+* **Error Checking**: See errors and warnings as you type (Flycheck)
+* **Offline Documentation**: Blazing fast doc lookups (Dash-docs)
+* **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Swift, Scala, and more
 
 ## Prerequisites
 
@@ -18,6 +19,7 @@ You need macOS and [Homebrew](https://brew.sh/) installed. If you don't have Hom
 
 ```bash
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+
 ```
 
 ## Complete Installation Guide
@@ -28,34 +30,40 @@ You need macOS and [Homebrew](https://brew.sh/) installed. If you don't have Hom
 brew tap d12frosted/emacs-plus
 
 brew install emacs-plus --HEAD --with-debug --with-xwidgets --with-dbus --with-mailutils --with-ctags --with-imagemagick
+
 ```
 
 Verify the installation:
 
 ```bash
 emacs --version
+
 ```
 
 You should see "GNU Emacs 30.2" or similar.
 
 ### Step 2: Install This Configuration
 
-If you have an existing Emacs config, back it up first:
+Modern Emacs uses the standard `.config` directory. If you have an existing Emacs config, back it up first:
 
 ```bash
-mv ~/.emacs.d ~/.emacs.d.backup
+mv ~/.config/emacs ~/.config/emacs.backup
+mv ~/.emacs.d ~/.emacs.d.backup 
+
 ```
 
 Clone and set up this configuration with the Gruvbox Dark Hard theme:
 
 ```bash
-git clone git@github.com:J4VMC/emacs-modular.git ~/.emacs.d
+git clone git@github.com:J4VMC/emacs-modular.git ~/.config/emacs
+
 ```
 
 Or if you want to clone it with the Catppuccin Mocha theme:
 
 ```bash
-git clone -b catppuccin git@github.com:J4VMC/emacs-modular.git ~/.emacs.d
+git clone -b catppuccin git@github.com:J4VMC/emacs-modular.git ~/.config/emacs
+
 ```
 
 ### Step 3: Install Core Tools (Required for Everyone)
@@ -65,6 +73,7 @@ These tools are needed for basic functionality:
 ```bash
 # Libraries required by Emacs packages
 brew install ripgrep fd git libgccjit libvterm imagemagick
+
 ```
 
 That's it! The configuration is already set up to use it automatically.
@@ -102,12 +111,14 @@ fish_add_path ~/.local/bin
 
 # Virtual environment manager
 pipx install poetry
+
 ```
 
 **Test it works:**
 
 ```bash
 which ruff  # Should show a path
+
 ```
 
 ---
@@ -127,19 +138,21 @@ npm install -g prettier                      # Code formatter
 npm install -g eslint                        # Linter
 npm install -g vscode-langservers-extracted # ESLint Language server
 npm install -g @tailwindcss/language-server  # For Tailwind CSS support
+
 ```
 
 **Test it works:**
 
 ```bash
 which typescript-language-server  # Should show a path
+
 ```
 
 ---
 
 #### Go
 
-````bash
+```bash
 # Install Go
 brew install go
 
@@ -151,10 +164,14 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest  # Linter
 # Add GOPATH to PATH
 fish_add_path (go env GOPATH)/bin
 
+```
+
 **Test it works:**
+
 ```bash
 ls (go env GOPATH)/bin/gopls # Should show a path like /Users/you/go/bin/gopls
-````
+
+```
 
 ---
 
@@ -171,12 +188,14 @@ source "$HOME/.cargo/env.fish"
 rustup component add rust-analyzer  # Language server
 rustup component add rustfmt         # Formatter
 rustup component add clippy          # Linter
+
 ```
 
 **Test it works:**
 
 ```bash
 which rust-analyzer  # Should show a path in ~/.cargo/bin
+
 ```
 
 ---
@@ -199,17 +218,20 @@ composer global require phpstan/phpstan               # Static analyzer
 
 # PHP unit testing
 composer global require phpunit/phpunit
+
 ```
 
 ```bash
 # Add Composer to Path
 fish_add_path (composer global config bin-dir --absolute)
+
 ```
 
-_Test it works:_
+*Test it works:*
 
 ```bash
 which phpcs  # Should show a path
+
 ```
 
 ---
@@ -225,12 +247,14 @@ xcode-select --install
 # Install additional Swift tools
 brew install swiftlint      # Linter
 brew install swift-format   # Formatter
+
 ```
 
 **Test it works:**
 
 ```bash
 which swift  # Should show /usr/bin/swift
+
 ```
 
 Note: For the Swift LSP server, you need the full Xcode app installed (not just command line tools). Download it from the Mac App Store.
@@ -251,12 +275,14 @@ cs setup  # This installs scala, sbt, and other tools
 
 # Install Metals (Scala language server)
 cs install metals
+
 ```
 
 **Test it works:**
 
 ```bash
 which metals  # Should show a path
+
 ```
 
 ---
@@ -271,12 +297,14 @@ npm install -g sql-formatter
 
 # Optional: Install PostgreSQL client for testing
 brew install postgresql@18
+
 ```
 
 **Test it works:**
 
 ```bash
 which sqlint  # Should show a path
+
 ```
 
 ---
@@ -285,12 +313,13 @@ which sqlint  # Should show a path
 
 ```bash
 # Install Docker Desktop (includes Docker CLI)
-[Download the installer](https://desktop.docker.com/mac/main/arm64/Docker.dmg)
+# Download the installer from: https://desktop.docker.com/mac/main/arm64/Docker.dmg
 
 # Start Docker Desktop from Applications folder
 
 # Install Dockerfile linter
 brew install hadolint
+
 ```
 
 **Test it works:**
@@ -298,6 +327,7 @@ brew install hadolint
 ```bash
 which docker    # Should show a path
 which hadolint  # Should show a path
+
 ```
 
 ---
@@ -307,12 +337,14 @@ which hadolint  # Should show a path
 ```bash
 # Install Pandoc (for Markdown preview)
 brew install pandoc
+
 ```
 
 **Test it works:**
 
 ```bash
 which pandoc  # Should show a path
+
 ```
 
 ---
@@ -322,6 +354,7 @@ which pandoc  # Should show a path
 ```bash
 # Install libxml2, which provides the xmllint formatting tool
 brew install libxml2
+
 ```
 
 ---
@@ -331,151 +364,185 @@ brew install libxml2
 The only package that elpaca fails to install from Github. It's a package that adds structured editing and movement to a wide range of programming languages.
 
 ```bash
-git clone git@github.com:mickeynp/combobulate.git ~/.emacs.d/combobulate
+git clone git@github.com:mickeynp/combobulate.git ~/.config/emacs/combobulate
+
 ```
 
 ### Step 6: Start Emacs
 
 ```bash
 emacs
+
 ```
 
 **What happens on first launch:**
 
-1. Emacs will automatically download and install packages (takes 2-5 minutes)
-2. You'll see a dashboard with recent files and projects
-3. The first time you open a code file, Emacs will ask to install tree-sitter grammars
+1. Emacs will automatically download and install packages (takes 2-5 minutes).
+2. You'll see a dashboard with recent files and projects.
+3. Emacs will prompt you to update packages (you can select `y` or `n`).
+4. When you open a code file, the `treesit-auto` package will automatically download and install the required syntax grammar in the background.
 
-**Installing tree-sitter grammars:**
-
-- When you open a `.py`, `.js`, `.go`, or other supported file for the first time
-- Emacs might prompt: "Install tree-sitter grammar for python?"
-- Press `y` to install it
-- This happens once per language
-- You can also install them with `M-x treesit-auto-install-all`
-
-### Step 8: Verify Everything Works
+### Step 7: Verify Everything Works
 
 Let's test with a Python file:
 
 1. Press `C-x C-f` (hold Control, press x, release, then hold Control and press f)
 2. Type `~/test.py` and press Enter
 3. Type this code:
+```python
+def hello(name):
+    return f"Hello, {name}"
 
-   ```python
-   def hello(name):
-       return f"Hello, {name}"
+print(hello("World"))
 
-   print(hello("World"))
-   ```
+```
+
 
 4. Save with `C-x C-s`
 
 **You should see:**
 
-- ✅ Line numbers on the left
-- ✅ Syntax highlighting in color
-- ✅ Auto-completion popup when you type
-- ✅ Code auto-formats when you save
+* ✅ Line numbers on the left
+* ✅ Syntax highlighting in color
+* ✅ Auto-completion popup when you type
+* ✅ Code auto-formats when you save
 
 **If something doesn't work:**
 
-- Check that the language server is installed: `which pyright`
-- Open Emacs and press `M-x lsp-doctor` (hold Option/Alt, press x, type "lsp-doctor")
-- This will show you what's missing
+* Check that the language server is installed: `which basedpyright`
+* Open Emacs and press `M-x lsp-doctor` (hold Option/Alt, press x, type "lsp-doctor")
+* This will show you what's missing
 
 ## Understanding Emacs Key Notation
 
 Emacs uses special notation for keyboard shortcuts:
 
-- `C-x` = Hold Control and press x
-- `M-x` = Hold Option/Alt (⌥) and press x
-- `C-c t` = Hold Control and press c, then release and press t
-- `s-j` = Hold Command (⌘) and press j
+* `C-x` = Hold Control and press x
+* `M-x` = Hold Option/Alt (⌥) and press x
+* `C-c t` = Hold Control and press c, then release and press t
+* `s-j` = Hold Command (⌘) and press j
 
 ## Essential Keyboard Shortcuts
 
-Some of the shortcuts below are custom for this configuration. All custom keybindings aim to be as ergonomic as possible to prevent the dreaded _Emacs pinky_. We don't use evil-mode because there's no point in doing that.
+Our keybindings act as a hybrid between classic Emacs bindings and modern IDE conveniences to prevent the dreaded *Emacs pinky*.
 
 ### Files and Buffers
 
-| Shortcut  | Action                    |
-| --------- | ------------------------- |
-| `C-x C-f` | Open a file               |
-| `C-x C-s` | Save current file         |
-| `C-x k`   | Close current file        |
-| `C-x b`   | Switch between open files |
-| `C-x C-c` | Quit Emacs                |
+| Shortcut | Action |
+| --- | --- |
+| `C-x C-f` | Open a file |
+| `C-x C-s` | Save current file |
+| `C-x k` | Close current file |
+| `C-x b` | Switch between open files |
+| `C-x C-c` | Quit Emacs |
 
-### Navigation
+### Window & Tab Management
 
-| Shortcut | Action                         |
-| -------- | ------------------------------ |
-| `C-s`    | Search forward                 |
-| `C-r`    | Search backward                |
-| `M-g g`  | Go to line number              |
-| `C-c j`  | Jump to any line (visual)      |
-| `s-j`    | Jump to any character (visual) |
+| Shortcut | Action |
+| --- | --- |
+| `s-<arrows>` | Move focus between split windows |
+| `s-t` | Open a new tab (workspace) |
+| `s-l` | Close the current tab |
+| `C-x 1` | Maximize current window (close rest) |
+| `C-x 2` | Split window vertically |
+| `C-x 3` | Split window horizontally |
 
-### Project Management
+### Navigation & Search
 
-| Shortcut  | Action                       |
-| --------- | ---------------------------- |
-| `C-c p f` | Find file in project (fuzzy) |
-| `C-c p p` | Switch between projects      |
-| `C-x t t` | Toggle file tree sidebar     |
-| `M-0`     | Focus on file tree           |
-| `C-c t a` | Show current project in tree |
+| Shortcut | Action |
+| --- | --- |
+| `M-s l` | Search for a line in the current file (Fuzzy) |
+| `M-s L` | Search for a line across all open files |
+| `M-s r` | Project-wide text search (Ripgrep) |
+| `C-c j` | Jump instantly to any visible line |
+| `s-j` | Jump instantly to any visible character |
 
-### Git (Magit)
+### Project Management (`s-p` Prefix)
 
-| Shortcut | Action          |
-| -------- | --------------- |
-| `C-x g`  | Open Git status |
+We use the `Command-p` (`s-p`) prefix as our central "Command Palette" for project actions:
+
+| Shortcut | Action |
+| --- | --- |
+| `s-p p` | Switch between known projects |
+| `s-p f` | Find file in current project (Fuzzy) |
+| `s-p g` | Grep (Search) text across project |
+| `s-p t` | Toggle file tree sidebar |
+| `s-p 0` | Focus cursor on the file tree |
+| `s-p v` | Toggle project terminal |
+| `s-p c` | Compile / Build project |
+
+### Git & GitHub (Magit & Forge)
+
+| Shortcut | Action |
+| --- | --- |
+| `C-x g` | Open Git status |
 
 **In Magit status buffer:**
 
-- `s` = Stage file or hunk
-- `u` = Unstage file or hunk
-- `c c` = Commit (type message, then `C-c C-c` to confirm)
-- `P p` = Push to remote
-- `F p` = Pull from remote
-- `q` = Quit Magit
+* `s` = Stage file or hunk
+* `u` = Unstage file or hunk
+* `c c` = Commit (type message, then `C-c C-c` to confirm)
+* `P p` = Push to remote
+* `F p` = Pull from remote
+* `@` = Open Forge menu (Pull Requests & Issues)
+* `q` = Quit Magit
+
+> **Note on Forge (GitHub/GitLab Integration):**
+> To use Forge to manage Pull Requests, you must create a Personal Access Token on GitHub and store it in `~/.authinfo.gpg` using this format:
+> `machine api.github.com login YOUR_USERNAME^forge password YOUR_TOKEN`
 
 ### Terminal
 
-| Shortcut  | Action                        |
-| --------- | ----------------------------- |
-| `C-c t`   | Toggle terminal at bottom     |
-| `C-c p v` | Open terminal in project root |
+| Shortcut | Action |
+| --- | --- |
+| `s-9` | Toggle "Quake-style" popup terminal |
+| `M-k` | Force kill terminal (bypasses prompts) |
 
-### Code Navigation (when in a code file)
+### Code Navigation & Intelligence (LSP)
 
-| Shortcut  | Action             |
-| --------- | ------------------ |
-| `M-.`     | Go to definition   |
-| `M-,`     | Go back            |
-| `C-c C-d` | Show documentation |
-| `M-n`     | Next error         |
-| `M-p`     | Previous error     |
-| `C-c l`   | LSP command prefix |
+| Shortcut | Action |
+| --- | --- |
+| `M-.` | Go to definition |
+| `M-,` | Go back |
+| `M-?` | Find all references |
+| `C-c C-d` | Show LSP hover documentation |
+| `M-s d` | Search offline Dash docs (word at cursor) |
+| `M-n` | Jump to next code error |
+| `M-p` | Jump to previous code error |
+| `C-c l r r` | Rename symbol across project |
 
-### Editing
+### Editing (CUA Mode Enabled)
 
-| Shortcut  | Action            |
-| --------- | ----------------- |
-| `C-space` | Start selection   |
-| `C-w`     | Cut selection     |
-| `M-w`     | Copy selection    |
-| `C-y`     | Paste             |
-| `M-;`     | Comment/uncomment |
-| `C-/`     | Undo              |
+This configuration enables `cua-mode`, meaning standard OS copy/paste shortcuts work when text is highlighted:
+
+| Shortcut | Action |
+| --- | --- |
+| `C-space` | Start selection |
+| `C-c` | Copy (when text is selected) |
+| `C-x` | Cut (when text is selected) |
+| `C-v` | Paste (when text is selected) |
+| `M-J` | Expand selection semantically (word -> string -> func) |
+| `M-/` | Comment / Uncomment line or block |
+| `C-/` | Undo |
+| `M-up` | Move current line/selection up |
+| `M-down` | Move current line/selection down |
+
+### Debugging (DAP Mode)
+
+| Shortcut | Action |
+| --- | --- |
+| `C-c d d` | Start Debugging (select template) |
+| `C-c d b` | Toggle Breakpoint |
+| `C-c d n` | Step Over |
+| `C-c d i` | Step Into |
+| `C-c d c` | Continue |
+| `C-c d r` | Stop / Disconnect Debugger |
 
 ### Getting Help
 
-| Shortcut | Action                                            |
-| -------- | ------------------------------------------------- |
-| `C-h t`  | Start interactive tutorial                        |
-| `C-h k`  | Describe key (press this, then press another key) |
-| `C-h m`  | Show all shortcuts for current mode               |
-| `C-h f`  | Describe function                                 |
+| Shortcut | Action |
+| --- | --- |
+| `C-h t` | Start interactive tutorial |
+| `C-h k` | Describe key (press this, then press another key) |
+| `C-h f` | Describe function |
+| `C-h v` | Describe variable |
