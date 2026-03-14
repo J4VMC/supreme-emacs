@@ -70,11 +70,11 @@ html-mode web-mode
 ;; ANNOTATIONS FOR HTML
 ;; ============================================
 
-(fixme "")
-(todo "")
-(bug "")
-(hack "")
-(working "")
+(fixme "< !-- FIXME: " p " -- >")
+(todo "< !-- TODO: " p " -- >")
+(bug "< !-- BUG: " p " -- >")
+(hack "< !-- HACK: " p " -- >")
+(working "< !-- WORKING HERE: " p " -- >")
 
 
 css-mode css-ts-mode
