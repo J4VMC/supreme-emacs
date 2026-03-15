@@ -74,7 +74,7 @@
   :config
   ;; Set the command prefix to `C-c o`.
   ;; -> e.g., `C-c o n` moves the cursor to the next logical code node.
-  (setq combobulate-key-prefix "C-c o")))
+  (setq combobulate-key-prefix "C-c o"))
 
 ;; =============================================================================
 ;; TREE-SITTER CODE FOLDING

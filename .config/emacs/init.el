@@ -334,7 +334,7 @@ Return nil if file is missing or unreadable."
 (defun jmc-elpaca-auto-update ()
   "Run `elpaca-update-all` safely and silently."
   (message "Checking for package updates...")
-  (dlet ((elpaca-log-functions nil))
+  (let ((elpaca-log-functions nil))
     (condition-case err
         (progn
           (elpaca-update-all)
