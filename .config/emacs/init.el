@@ -283,7 +283,7 @@
 (require 'dev)         ; Development tools (Magit, Docker)
 (require 'lsp)         ; Language Server Protocol clients
 (require 'docs)        ; Offline documentation tools
-(require 'debug)       ; Debugging tools (DAP-mode)
+(require 'debugger)       ; Debugging tools (DAP-mode)
 (require 'projects)    ; Project management (Projectile, Treemacs)
 (require 'web)         ; Web development configuration
 

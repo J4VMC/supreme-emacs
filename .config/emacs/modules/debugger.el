@@ -1,4 +1,4 @@
-;;; debug.el --- All necessary tools for debugging -*- lexical-binding: t; -*-
+;;; debugger.el --- All necessary tools for debugging -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;
@@ -255,6 +255,6 @@ Useful for troubleshooting adapter connection issues."
 ;; FINALIZE
 ;; =============================================================================
 
-(provide 'debug)
+(provide 'debugger)
 
 ;;; debug.el ends here
