@@ -109,6 +109,14 @@
 					    ("FLASK_ENV" . "development"))
 				     :module "flask" :name "Python :: Debug (Flask)"))
 
+  ;; Python: FastAPI Web App (via Uvicorn)
+  (dap-register-debug-template "Python :: Debug (FastAPI)"
+			       (list :type "python"
+				     :args "main:app --port 8000"
+				     :cwd nil
+				     :module "uvicorn"
+				     :name "Python :: Debug (FastAPI)"))
+
   ;; Python: Django Web App
   (dap-register-debug-template "Python :: Debug (Django)"
 			       (list :type "python" :args "manage.py runserver" :cwd nil
