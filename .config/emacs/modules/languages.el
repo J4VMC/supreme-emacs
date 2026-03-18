@@ -495,6 +495,7 @@
   (setq sh-basic-offset 4))
 
 (use-package docstr
+  :ensure t
   :hook ((php-ts-mode typescript-ts-mode tsx-ts-mode js-ts-mode python-ts-mode go-ts-mode
 		      rustic-mode scala-ts-mode)
          . docstr-mode))

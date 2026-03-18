@@ -97,6 +97,7 @@
   (lsp-auto-configure t)            ; Let LSP attempt to set up servers automatically.
   (lsp-eldoc-enable-hover t)        ; Show function signatures in the bottom bar.
   (lsp-enable-dap-auto-configure t) ; Bridge settings over to the debugger (`dap-mode`).
+  (lsp-enable-snippet nil)          ; No need for Yasnippet.
 
   ;; **PERFORMANCE**: Disable built-in file watching.
   ;; -> This can be a massive resource hog in large projects.
