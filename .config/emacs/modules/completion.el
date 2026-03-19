@@ -300,17 +300,12 @@
   ;; -> This package intercepts those snippets and feeds them into Tempel,
   ;;    allowing you to expand them seamlessly as if they were local Tempel snippets.
   (use-package lsp-snippet-tempel
-    :straight (lsp-snippet-tempel :type git
-                                  :host github
-                                  :repo "svaante/lsp-snippet")
+    :ensure (:host github :repo "svaante/lsp-snippet")
     :config
     ;; Conditionally enable the integration based on which LSP client you use.
     (when (featurep 'lsp-mode)
       ;; -> Route `lsp-mode` snippets into Tempel.
-      (lsp-snippet-tempel-lsp-mode-init))
-    (when (featurep 'eglot)
-      ;; -> Route `eglot` (built-in Emacs LSP) snippets into Tempel.
-      (lsp-snippet-tempel-eglot-init)))
+      (lsp-snippet-tempel-lsp-mode-init)))
 
   ;; --- Conventional Commits Integration ---
   (defun jmc-magit-commit-conventional-h ()

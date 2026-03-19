@@ -66,6 +66,7 @@
 
 (use-package java-mode
   :ensure nil ; Built-in
+  :mode ("\\.java\\'" . java-ts-mode)
   :hook ((java-ts-mode . lsp-deferred)
          (java-ts-mode . apheleia-mode)
          (java-ts-mode . flycheck-mode)))
