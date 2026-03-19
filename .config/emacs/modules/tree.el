@@ -47,13 +47,7 @@
   ;; Automatically install missing grammars when you open a file.
   ;; -> Set to 'prompt if you want Emacs to ask for permission first.
   ;; -> Set to t to install silently in the background.
-  (treesit-auto-install t)
-  :config
-  ;; Tell treesit-auto to handle all supported languages.
-  (treesit-auto-add-to-auto-mode-alist 'all)
-  ;; Enable the mode globally. This automatically remaps old modes
-  ;; (like python-mode) to new modes (python-ts-mode) if the grammar exists.
-  (global-treesit-auto-mode))
+  (treesit-auto-install t))
 
 ;; ===========================================================================
 ;; COMBOBULATE (STRUCTURAL EDITING)

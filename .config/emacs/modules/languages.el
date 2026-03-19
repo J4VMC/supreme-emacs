@@ -1,3 +1,4 @@
+
 ;;; languages.el --- Language-specific configurations -*- lexical-binding: t; -*-
 
 ;;; Commentary:
@@ -192,10 +193,13 @@
 ;; --- Environment & Project Management ---
 
 (defun jmc-python-venv-autoload-h ()
-  "Automatically activate a local .venv if found in the project root."
+  "Automatically activate a local .venv if found in the project root, but only if it isn't already active."
   (interactive)
-  (when-let ((venv (locate-dominating-file default-directory ".venv")))
-    (pyvenv-activate (expand-file-name ".venv" venv))))
+  (when-let* ((venv-dir (locate-dominating-file default-directory ".venv"))
+              (venv-path (expand-file-name ".venv" venv-dir)))
+    ;; Check if this exact venv is already active in the environment
+    (unless (string-equal (getenv "VIRTUAL_ENV") venv-path)
+      (pyvenv-activate venv-path))))
 
 (use-package pyvenv
   :ensure t
