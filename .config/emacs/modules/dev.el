@@ -128,10 +128,6 @@
   (setf (alist-get 'google-java-format apheleia-formatters)
         '("google-java-format" "-"))
 
-  ;; Python: Use `ruff`, a blazingly fast modern Python linter/formatter.
-  (setf (alist-get 'ruff apheleia-formatters)
-        '("ruff" "format" "--stdin-filename" filepath "-"))
-
   ;; Go: Use `goimports`, which formats the code AND organizes import statements.
   (setf (alist-get 'goimports apheleia-formatters)
         '("goimports"))
@@ -161,9 +157,9 @@
   (setf (alist-get 'java-mode apheleia-mode-alist) 'google-java-format)
   (setf (alist-get 'java-ts-mode apheleia-mode-alist) 'google-java-format)
 
-  ;; Python (covers both standard and Tree-sitter modes)
-  (setf (alist-get 'python-mode apheleia-mode-alist) 'ruff)
-  (setf (alist-get 'python-ts-mode apheleia-mode-alist) 'ruff)
+  ;; Python: Run isort first to organize imports, then black for formatting
+  (setf (alist-get 'python-mode apheleia-mode-alist) '(isort black))
+  (setf (alist-get 'python-ts-mode apheleia-mode-alist) '(isort black))
 
   ;; Go
   (setf (alist-get 'go-mode apheleia-mode-alist) 'goimports)
@@ -237,20 +233,6 @@
             (message) line-end))
     :modes (typescript-ts-mode tsx-ts-mode js-ts-mode))
 
-  ;; Python (`ruff`)
-  (flycheck-define-checker python-ruff
-    "A Python syntax and style checker using Ruff."
-    :command ("ruff" "check"
-              ;; Explicitly select standard rule categories (Errors, Flakes, Warnings, etc.)
-              "--select" "E,F,W,D,UP,B,SIM,S"
-              "--output-format" "concise"
-              "--stdin-filename" source-inplace
-              "-")
-    :standard-input t ; Feed code via standard input so it lints unsaved changes.
-    :error-patterns
-    ((error line-start (file-name) ":" line ":" column ": " (message) line-end))
-    :modes (python-mode python-ts-mode))
-
   ;; SQL (`sqlint`)
   (flycheck-define-checker sql-sqlint
     "A SQL syntax checker using sqlint."
@@ -272,7 +254,6 @@
   ;; --- Registering Checkers ---
   ;; Add our custom checkers to Flycheck's active roster.
   (add-to-list 'flycheck-checkers 'typescript-tsc-syntax)
-  (add-to-list 'flycheck-checkers 'python-ruff)
   (add-to-list 'flycheck-checkers 'fish)
   (add-to-list 'flycheck-checkers 'sql-sqlint)
 
@@ -288,11 +269,11 @@
 ;;    "unused import." By chaining them, we tell Flycheck: "Run the fast LSP checks
 ;;    first. Only if those pass, run the deeper linter checks."
 
-;; Python: Let LSP run first, then fallback to `python-ruff`.
+;; Python: Let LSP run first, then fallback to `python-flake8`.
 (add-hook 'lsp-mode-hook
           (lambda ()
             (when (derived-mode-p 'python-mode 'python-ts-mode)
-              (flycheck-add-next-checker 'lsp 'python-ruff))))
+              (flycheck-add-next-checker 'lsp 'python-flake8))))
 
 ;; Go: Let LSP run first, then fallback to `golangci-lint`.
 (add-hook 'lsp-mode-hook
@@ -306,7 +287,7 @@
             (when (derived-mode-p 'sql-mode 'sql-ts-mode)
               (flycheck-add-next-checker 'lsp 'sql-sqlint))))
 
-;; JavaScript/TypeScript: Let LSP (ESLint) run first (immediate), 
+;; JavaScript/TypeScript: Let LSP (ESLint) run first (immediate),
 ;; then fallback to `typescript-tsc-syntax` (on save).
 (add-hook 'lsp-mode-hook
           (lambda ()
