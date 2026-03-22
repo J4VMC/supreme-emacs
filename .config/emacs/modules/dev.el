@@ -229,12 +229,13 @@
     "A TypeScript syntax checker using tsc."
     :command ("tsc"
               "--noEmit"         ; Do not compile JS files, strictly type-check.
+	      "--allowJs"        ; Allow JS files, not just TS
               "--pretty" "false" ; Output machine-readable, plain text errors.
               source-inplace)
     :error-patterns
     ((error line-start (file-name) "(" line "," column "): error TS"
             (message) line-end))
-    :modes (typescript-ts-mode tsx-ts-mode))
+    :modes (typescript-ts-mode tsx-ts-mode js-ts-mode))
 
   ;; Python (`ruff`)
   (flycheck-define-checker python-ruff
@@ -270,6 +271,8 @@
 
   ;; --- Registering Checkers ---
   ;; Add our custom checkers to Flycheck's active roster.
+  (add-to-list 'flycheck-checkers 'typescript-tsc-syntax)
+  (add-to-list 'flycheck-checkers 'python-ruff)
   (add-to-list 'flycheck-checkers 'fish)
   (add-to-list 'flycheck-checkers 'sql-sqlint)
 
@@ -302,6 +305,13 @@
           (lambda ()
             (when (derived-mode-p 'sql-mode 'sql-ts-mode)
               (flycheck-add-next-checker 'lsp 'sql-sqlint))))
+
+;; JavaScript/TypeScript: Let LSP (ESLint) run first (immediate), 
+;; then fallback to `typescript-tsc-syntax` (on save).
+(add-hook 'lsp-mode-hook
+          (lambda ()
+            (when (derived-mode-p 'typescript-ts-mode 'tsx-ts-mode 'js-ts-mode)
+              (flycheck-add-next-checker 'lsp 'typescript-tsc-syntax))))
 
 ;; --- Language-Specific Flycheck Extensions ---
 ;; Community-provided packages that wire up complex linters automatically.

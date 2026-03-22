@@ -213,14 +213,25 @@
   :after dap-mode
   :hook ((js-ts-mode typescript-ts-mode tsx-ts-mode) . dap-node-setup)
   :config
-  ;; Template: Run the current JS/TS file.
-  (dap-register-debug-template "JS/TS :: Debug (Current File)"
-			       (list :type "node" :name "JS/TS :: Debug (Current File)" :request "launch"
-				     :program "${file}" :cwd "${fileDirname}"
-				     ;; Dynamically add `ts-node` if executing a TypeScript file.
-				     :runtimeArgs (when (string-match-p "\\.ts$" (or (buffer-file-name) ""))
-						    '("-r" "ts-node/register"))
-				     ;; Ignore internal Node.js code when stepping through functions.
+  ;; Template: Run standard JavaScript files
+  (dap-register-debug-template "JS :: Debug (Current File)"
+			       (list :type "node"
+				     :name "JS :: Debug (Current File)"
+				     :request "launch"
+				     :program "${file}"
+				     :cwd "${fileDirname}"
+				     :skipFiles '("<node_internals>/**")))
+
+  ;; Template: Run TypeScript files directly via ts-node
+  (dap-register-debug-template "TypeScript :: Debug (Current File)"
+			       (list :type "node"
+				     :name "TypeScript :: Debug (Current File)"
+				     :request "launch"
+				     :cwd "${fileDirname}"
+				     :runtimeExecutable "node"
+				     :runtimeArgs '("-r" "ts-node/register")
+				     :args '("${file}")
+				     :sourceMaps t
 				     :skipFiles '("<node_internals>/**"))))
 
 ;; --- Rust (via LLDB) ---
