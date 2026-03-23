@@ -1,17 +1,9 @@
 ;;; dev.el --- All settings relevant for Software Development -*- lexical-binding: t; -*-
 
 ;;; Commentary:
-;;
 ;; This file configures the essential tools for a modern software development
 ;; workflow inside Emacs. It transforms Emacs into a fully-featured IDE.
-;;
-;; Key tools configured here:
-;; 1. Magit: The legendary Git client for Emacs.
-;; 2. Restclient: An HTTP API testing tool (similar to Postman).
-;; 3. Emmet: High-speed HTML/CSS abbreviation expansion.
-;; 4. Apheleia: A "hands-off" auto-formatting system (runs on save).
-;; 5. Flycheck: On-the-fly syntax and error checking (the red squiggles).
-;;
+
 ;;; Code:
 
 ;; =============================================================================
@@ -41,28 +33,16 @@
 ;; VERSION CONTROL (MAGIT)
 ;; =============================================================================
 
-;; Magit is a full-featured, interactive Git client right inside Emacs.
-;; -> It is widely considered a "killer feature" of the Emacs ecosystem.
-;; 
 (use-package magit
   :ensure t
-  ;; Magit relies on the `transient` package to draw its pop-up menus.
-  ;; -> `:after` ensures we don't try to load Magit before its dependencies are ready.
   :after transient
-  ;; Bind the main entry point, `magit-status`, to `C-x g`.
-  ;; -> This opens a dashboard showing your current Git state (modified files, branches, etc.).
   :bind ("C-x g" . magit-status))
 
-;; Forge integrates Magit with Git hosting platforms (GitHub, GitLab, etc.).
-;; -> Allows you to fetch issues, create pull requests, and review code without leaving Emacs.
 (use-package forge
   :after magit
   :ensure t
-  :bind (:map magit-mode-map
-              ("@" . forge-dispatch))
+  :bind (:map magit-mode-map ("@" . forge-dispatch))
   :config
-  ;; Tell Forge where to find your API authentication credentials (like a GitHub Personal Access Token).
-  ;; -> `~/.authinfo.gpg` is the standard, secure Emacs location for encrypted passwords.
   (setq auth-sources '("~/.authinfo.gpg"))
   (add-hook 'magit-status-sections-hook #'magit-insert-forge-pullreqs nil t)
   (add-hook 'magit-status-sections-hook #'magit-insert-forge-issues nil t)
@@ -72,111 +52,56 @@
 ;; API TESTING (RESTCLIENT)
 ;; =============================================================================
 
-;; Restclient allows you to write and execute HTTP requests from a plain text file.
-;; -> It replaces heavy GUI apps like Postman or Insomnia, letting you keep your
-;;    API tests in source control alongside your code.
 (use-package restclient
   :ensure t
-  ;; Automatically enable `restclient-mode` when opening files that end in `.http`.
   :mode ("\\.http\\'" . restclient-mode)
   :config
-  ;; Load an extension that adds support for writing automated assertions
-  ;; (e.g., verifying that an endpoint returns a 200 OK or a specific JSON value).
   (use-package restclient-test :ensure t))
 
 ;; =============================================================================
 ;; WEB DEVELOPMENT (EMMET)
 ;; =============================================================================
 
-;; Emmet is a plugin for high-speed HTML and CSS coding.
-;; -> Example: Typing `div#page>ul.nav>li*5` and pressing TAB will instantly
-;;    expand into a full HTML list structure.
 (use-package emmet-mode
   :ensure t
-  ;; Automatically activate Emmet when working in HTML or CSS files.
   :hook ((web-mode . emmet-mode)
          (css-mode . emmet-mode))
   :config
-  ;; Tweak for React/JSX development:
-  ;; -> Forces Emmet to expand with `className="foo"` (React style) instead of
-  ;;    `class="foo"` (standard HTML style) when inside JSX files.
   (setq emmet-expand-jsx-className? t))
 
 ;; =============================================================================
 ;; AUTO-FORMATTING (APHELEIA)
 ;; =============================================================================
-;;
-;; Apheleia is our "set it and forget it" code formatter.
-;; It runs CLI tools (like Prettier, Black, or Gofmt) to format your buffer
-;; automatically every time you save, *without* jumping your cursor around.
 
 (use-package apheleia
   :ensure t
-  ;; Hide the "Aph" indicator from the status bar to reduce clutter.
   :diminish ""
   :config
-
   ;; --- 1. Define Custom Formatters ---
-  ;; Apheleia knows about many tools out of the box, but we explicitly define
-  ;; our preferred CLI commands here for complete control.
-
-  ;; PHP: Use PHP Code Beautifier (`phpcbf`) enforcing the PSR12 standard.
   (setf (alist-get 'phpcs-psr12 apheleia-formatters)
-        '("phpcbf" "--standard=PSR12" "--stdin-path=" (or buffer-file-name "stdin")))
-
-  ;; Java: Use Google Java Format
-  (setf (alist-get 'google-java-format apheleia-formatters)
-        '("google-java-format" "-"))
-
-  ;; Go: Use `goimports`, which formats the code AND organizes import statements.
-  (setf (alist-get 'goimports apheleia-formatters)
-        '("goimports"))
-
-  ;; Rust: Use standard `rustfmt`.
-  (setf (alist-get 'rustfmt apheleia-formatters)
-        '("rustfmt" "--emit=stdout"))
-
-  ;; Scala: Use `scalafmt`.
-  (setf (alist-get 'scalafmt apheleia-formatters)
-        '("scalafmt" "--stdin" "--stdout"))
-
-  ;; SQL: Use `sql-formatter` and configure it to capitalize keywords (SELECT, FROM).
+        '("phpcbf" "--standard=PSR12" 
+          (concat "--stdin-path=" (or buffer-file-name "stdin"))))
+  (setf (alist-get 'google-java-format apheleia-formatters) '("google-java-format" "-"))
+  (setf (alist-get 'goimports apheleia-formatters) '("goimports"))
+  (setf (alist-get 'rustfmt apheleia-formatters) '("rustfmt" "--emit=stdout"))
+  (setf (alist-get 'scalafmt apheleia-formatters) '("scalafmt" "--stdin" "--stdout"))
   (setf (alist-get 'sql-formatter apheleia-formatters)
-        '("sql-formatter"
-          "--language" "postgresql"
-          "--indent" "2"
-          "--uppercase"))
+        '("sql-formatter" "--language" "postgresql" "--indent" "2" "--uppercase"))
 
   ;; --- 2. Associate Modes with Formatters ---
-  ;; Map Emacs language modes (e.g., `python-ts-mode`) to the formatter names defined above.
-
-  ;; PHP
   (setf (alist-get 'php-ts-mode apheleia-mode-alist) 'phpcs-psr12)
-
-  ;; Java
   (setf (alist-get 'java-mode apheleia-mode-alist) 'google-java-format)
   (setf (alist-get 'java-ts-mode apheleia-mode-alist) 'google-java-format)
-
-  ;; Python: Run isort first to organize imports, then black for formatting
   (setf (alist-get 'python-mode apheleia-mode-alist) '(isort black))
   (setf (alist-get 'python-ts-mode apheleia-mode-alist) '(isort black))
-
-  ;; Go
   (setf (alist-get 'go-mode apheleia-mode-alist) 'goimports)
   (setf (alist-get 'go-ts-mode apheleia-mode-alist) 'goimports)
-
-  ;; Rust
   (setf (alist-get 'rust-ts-mode apheleia-mode-alist) 'rustfmt)
-
-  ;; Scala
   (setf (alist-get 'scala-ts-mode apheleia-mode-alist) 'scalafmt)
-
-  ;; SQL
   (setf (alist-get 'sql-mode apheleia-mode-alist) 'sql-formatter)
   (setf (alist-get 'sql-ts-mode apheleia-mode-alist) 'sql-formatter)
 
-  ;; Web Technologies (JavaScript, TypeScript, HTML, CSS, JSON, YAML, Markdown)
-  ;; -> These all utilize the built-in `prettier` configurations provided by Apheleia.
+  ;; Web Technologies (Prettier)
   (setf (alist-get 'typescript-ts-mode apheleia-mode-alist) 'prettier-typescript)
   (setf (alist-get 'tsx-ts-mode apheleia-mode-alist) 'prettier-typescript)
   (setf (alist-get 'js-ts-mode apheleia-mode-alist) 'prettier-javascript)
@@ -195,45 +120,27 @@
   (setf (alist-get 'gfm-mode apheleia-mode-alist) 'prettier-markdown)
 
   ;; --- 3. Enable Globally ---
-  ;; Activate Apheleia everywhere. It will remain dormant until you edit a file
-  ;; whose major mode is explicitly listed in the mapping above.
   (apheleia-global-mode t))
 
 ;; =============================================================================
 ;; ON-THE-FLY SYNTAX CHECKING (FLYCHECK)
 ;; =============================================================================
-;;
-;; Flycheck is the engine that provides inline error highlighting (red squiggles)
-;; for syntax errors, style warnings, and linter issues as you type.
-;; 
 
 (use-package flycheck
   :ensure t
   :hook (prog-mode . flycheck-mode)
   :bind (:map flycheck-mode-map
-              ;; Easy navigation between errors in the current file.
-              ("M-n" . flycheck-next-error)     ; Jump to the next error
-              ("M-p" . flycheck-previous-error)) ; Jump to the previous error
+              ("M-n" . flycheck-next-error)
+              ("M-p" . flycheck-previous-error))
   :config
-
   ;; --- Custom Checker Definitions ---
-  ;; Teach Flycheck how to use command-line linters it doesn't know natively.
-  ;; We define the command to run, and a Regular Expression to parse the output.
-
-  ;; TypeScript (`tsc`)
   (flycheck-define-checker typescript-tsc-syntax
     "A TypeScript syntax checker using tsc."
-    :command ("tsc"
-              "--noEmit"         ; Do not compile JS files, strictly type-check.
-	      "--allowJs"        ; Allow JS files, not just TS
-              "--pretty" "false" ; Output machine-readable, plain text errors.
-              source-inplace)
+    :command ("tsc" "--noEmit" "--allowJs" "--pretty" "false" source-inplace)
     :error-patterns
-    ((error line-start (file-name) "(" line "," column "): error TS"
-            (message) line-end))
+    ((error line-start (file-name) "(" line "," column "): error TS" (message) line-end))
     :modes (typescript-ts-mode tsx-ts-mode js-ts-mode))
 
-  ;; SQL (`sqlint`)
   (flycheck-define-checker sql-sqlint
     "A SQL syntax checker using sqlint."
     :command ("sqlint")
@@ -243,7 +150,6 @@
      (warning line-start "stdin:" line ":" column ":WARNING " (message) line-end))
     :modes (sql-mode sql-ts-mode))
   
-  ;; Fish
   (flycheck-define-checker fish
     "A Fish shell syntax checker using `fish -n`."
     :command ("fish" "-n" source)
@@ -252,52 +158,50 @@
     :modes fish-mode)
 
   ;; --- Registering Checkers ---
-  ;; Add our custom checkers to Flycheck's active roster.
   (add-to-list 'flycheck-checkers 'typescript-tsc-syntax)
   (add-to-list 'flycheck-checkers 'fish)
   (add-to-list 'flycheck-checkers 'sql-sqlint)
+  (add-to-list 'flycheck-checkers 'rustic-clippy)
 
-  ;; Tweak the built-in PHP checker (`phpcs`) to match our Apheleia PSR12 formatting.
   (setq flycheck-phpcs-standard "PSR12"))
 
 ;; =============================================================================
-;; FLYCHECK "CHAINING" & ADD-ONS
+;; FLYCHECK "CHAINING" (THE RELAY RACE)
 ;; =============================================================================
-;;
-;; "Chaining" prevents duplicate/noisy errors.
-;; -> Example: Both your LSP server and your local linter (like Ruff) might report
-;;    "unused import." By chaining them, we tell Flycheck: "Run the fast LSP checks
-;;    first. Only if those pass, run the deeper linter checks."
 
-;; Python: Let LSP run first, then fallback to `python-flake8`.
-(add-hook 'lsp-mode-hook
-          (lambda ()
-            (when (derived-mode-p 'python-mode 'python-ts-mode)
-              (flycheck-add-next-checker 'lsp 'python-flake8))))
+(defun jmc-configure-flycheck-chains ()
+  "Configure secondary linters to run after LSP finishes its primary checks."
+  (cond
+   ;; Python
+   ((derived-mode-p 'python-mode 'python-ts-mode)
+    (flycheck-add-next-checker 'lsp 'python-flake8))
+   ;; Go
+   ((derived-mode-p 'go-mode 'go-ts-mode)
+    (flycheck-add-next-checker 'lsp 'golangci-lint))
+   ;; SQL
+   ((derived-mode-p 'sql-mode 'sql-ts-mode)
+    (flycheck-add-next-checker 'lsp 'sql-sqlint))
+   ;; JS/TS
+   ((derived-mode-p 'typescript-ts-mode 'tsx-ts-mode 'js-ts-mode)
+    (flycheck-add-next-checker 'lsp 'typescript-tsc-syntax))
+   ;; PHP
+   ((derived-mode-p 'php-mode 'php-ts-mode)
+    (flycheck-add-next-checker 'lsp 'phpstan)
+    (flycheck-add-next-checker 'phpstan 'php-phpcs))
+   ;; Rust
+   ((derived-mode-p 'rustic-mode 'rust-ts-mode 'rust-mode)
+    (flycheck-add-next-checker 'lsp 'rustic-clippy))
+   ;; Scala (Ensure Flycheck displays the LSP errors)
+   ((derived-mode-p 'scala-ts-mode)
+    (flycheck-mode 1))))
 
-;; Go: Let LSP run first, then fallback to `golangci-lint`.
-(add-hook 'lsp-mode-hook
-          (lambda ()
-            (when (derived-mode-p 'go-mode 'go-ts-mode)
-              (flycheck-add-next-checker 'lsp 'golangci-lint))))
+(add-hook 'lsp-mode-hook #'jmc-configure-flycheck-chains)
 
-;; SQL: Let LSP run first, then fallback to `sql-sqlint`.
-(add-hook 'lsp-mode-hook
-          (lambda ()
-            (when (derived-mode-p 'sql-mode 'sql-ts-mode)
-              (flycheck-add-next-checker 'lsp 'sql-sqlint))))
+;; =============================================================================
+;; LANGUAGE-SPECIFIC SETUP HOOKS
+;; =============================================================================
 
-;; JavaScript/TypeScript: Let LSP (ESLint) run first (immediate),
-;; then fallback to `typescript-tsc-syntax` (on save).
-(add-hook 'lsp-mode-hook
-          (lambda ()
-            (when (derived-mode-p 'typescript-ts-mode 'tsx-ts-mode 'js-ts-mode)
-              (flycheck-add-next-checker 'lsp 'typescript-tsc-syntax))))
-
-;; --- Language-Specific Flycheck Extensions ---
-;; Community-provided packages that wire up complex linters automatically.
-
-;; Go: Integrates the powerful `golangci-lint` tool.
+;; --- Go ---
 (use-package flycheck-golangci-lint
   :ensure t
   :defer t
@@ -305,50 +209,39 @@
   :hook ((go-mode . flycheck-golangci-lint-setup)
          (go-ts-mode . flycheck-golangci-lint-setup)))
 
-;; Rust: Integrates `cargo check` and `clippy`.
-(use-package flycheck-rust
-  :ensure t
-  :defer t
-  :after flycheck
-  :hook (rust-ts-mode . flycheck-rust-setup))
-
-;; PHP: Integrates `phpstan` (a strict static analyzer for PHP).
+;; --- PHP ---
 (use-package flycheck-phpstan
   :ensure t
-  :defer t
   :after flycheck)
 
 (defun jmc-php-setup-h ()
-  "Enable Flycheck and PHPStan analysis when entering a PHP buffer."
+  "Setup PHP buffer specific features."
+  (setq-local indent-tabs-mode nil)
+  (setq-local tab-width 4)
+  (setq-local c-basic-offset 4)
   (require 'flycheck-phpstan)
   (flycheck-mode 1))
 
 (add-hook 'php-ts-mode-hook #'jmc-php-setup-h)
 
-;; Scala: The LSP server (Metals) handles all linting internally.
-;; -> We just ensure Flycheck is turned on so the LSP errors have a UI to display on.
-(add-hook 'lsp-mode-hook
-          (lambda ()
-            (when (derived-mode-p 'scala-ts-mode)
-              (flycheck-mode 1))))
+;; --- Rust ---
+(defun jmc-rust-lsp-optimization ()
+  "The ultimate rust-analyzer setup to prevent multi-server race conditions."
+  (setq-local lsp-disabled-clients '(semgrep-ls))
+  (setq-local lsp-enable-on-type-formatting nil)
+  (setq-local lsp-idle-delay 0.5))
+
+(add-hook 'rust-ts-mode-hook #'jmc-rust-lsp-optimization)
+(add-hook 'rustic-mode-hook #'jmc-rust-lsp-optimization)
 
 ;; =============================================================================
-;; QUICK-RUN
+;; QUICK-RUN & PACKAGE-LINT
 ;; =============================================================================
 
-;; `quickrun` provides a universal command to execute the file you are currently
-;; viewing, regardless of the programming language.
-;; -> Perfect for instantly testing a Python script, Go snippet, or shell script.
 (use-package quickrun
   :ensure t
-  ;; Bind to `Super-r` (Command-r on Mac, Win-r on Windows).
   :bind ("s-r" . quickrun))
 
-;; =============================================================================
-;; PACKAGE-LINT
-;; =============================================================================
-
-;; A linter specifically for developers writing their own Emacs Lisp packages.
 (use-package package-lint
   :ensure t
   :defer t)
@@ -356,9 +249,5 @@
 ;; =============================================================================
 ;; FINALIZE
 ;; =============================================================================
-
-;; Register this file as a loaded feature.
-;; -> Allows `(require 'dev)` in `init.el` to successfully load this module.
 (provide 'dev)
-
 ;;; dev.el ends here

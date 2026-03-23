@@ -153,24 +153,27 @@
   (supreme-brackets-setup-extended-keybindings))
 
 ;; --- Indentation Guides ---
-;; Draws vertical lines to visualize code indentation blocks (crucial for Python/YAML).
-(use-package highlight-indent-guides
+(use-package indent-bars
   :ensure t
-  :diminish highlight-indent-guides-mode
-  :hook (prog-mode . highlight-indent-guides-mode)
+  :hook (prog-mode . indent-bars-mode)
   :custom
-  (highlight-indent-guides-method 'fill)
-  (highlight-indent-guides-responsive 'top)
-  (highlight-indent-guides-auto-enabled nil) ;; Manually define colors below.
+  ;; 1. Force character rendering
+  (indent-bars-prefer-character t)
+  (indent-bars-no-stipple-char ?│)
 
-  :custom-face
-  ;; Define subtle, glassy vertical lines that blend into a dark theme.
-  (highlight-indent-guides-even-face ((t (:background "#262727"))))
-  (highlight-indent-guides-odd-face  ((t (:background "#32302f"))))
+  ;; 2. Inactive bars: Gruvbox 'bg3' (Gray)
+  (indent-bars-color '(highlight :face-bg nil :color "#665c54" :blend 1.0))
 
-  ;; Highlight the specific indentation block the cursor is currently inside.
-  (highlight-indent-guides-top-even-face ((t (:background "#45352b"))))
-  (highlight-indent-guides-top-odd-face  ((t (:background "#2f232b")))))
+  ;; 3. Depth colors: Gruvbox Bright (Red, Orange, Yellow, Green, Aqua, Blue, Purple)
+  (indent-bars-color-by-depth
+   '(:palette ("#fb4934" "#fe8019" "#fabd2f" "#b8bb26" "#8ec07c" "#83a598" "#d3869b") :blend 1.0))
+
+  ;; 4. Current depth: Gruvbox Bright Yellow (stands out beautifully)
+  (indent-bars-highlight-current-depth '(:color "#fabd2f" :blend 1.0))
+
+  :config
+  (require 'indent-bars-ts)
+  (setq indent-bars-treesit-support t))
 
 ;; Highlights semantic keywords like "TODO:", "FIXME:", and "NOTE:" in comments.
 (use-package hl-todo

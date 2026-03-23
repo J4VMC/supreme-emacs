@@ -1,4 +1,3 @@
-
 ;;; languages.el --- Language-specific configurations -*- lexical-binding: t; -*-
 
 ;;; Commentary:
@@ -74,6 +73,12 @@
 ;; =============================================================================
 ;; PHP
 ;; =============================================================================
+
+;; Force Emacs to see the Composer Global Binaries
+(let ((composer-bin (expand-file-name "~/.config/composer/vendor/bin")))
+  (when (file-directory-p composer-bin)
+    (add-to-list 'exec-path composer-bin)
+    (setenv "PATH" (concat composer-bin ":" (getenv "PATH")))))
 
 (use-package php-mode
   :ensure t
@@ -232,17 +237,22 @@
   :ensure t
   :mode ("\\.svelte\\'" . svelte-mode)
   :hook ((svelte-mode . lsp-deferred)
-         (svelte-mode . apheleia-mode)
+         (svelte-mode . apheleia-mxode)
          (svelte-mode . flycheck-mode)))
+
+;; Force Emacs to see the Go binaries directory
+(let ((go-bin (expand-file-name "~/go/bin")))
+  (when (file-directory-p go-bin)
+    (add-to-list 'exec-path go-bin)
+    (setenv "PATH" (concat go-bin ":" (getenv "PATH")))))
 
 (use-package go-mode
   :ensure t
+  :mode("\\.go\\'" . go-ts-mode)
   :hook ((go-ts-mode . lsp-deferred)
          (go-ts-mode . apheleia-mode)
          (go-ts-mode . flycheck-mode))
-  :config
-  ;; `goimports` handles both formatting and automatic import management.
-  (setq gofmt-command "goimports"))
+  :config)
 
 (use-package swift-mode
   :ensure t

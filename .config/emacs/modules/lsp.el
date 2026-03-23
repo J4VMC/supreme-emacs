@@ -295,7 +295,7 @@
 ;; --- Go (gopls) ---
 (with-eval-after-load 'lsp-mode
   (add-hook 'go-ts-mode-hook #'lsp-deferred)
-  (setq lsp-go-analyses '((fieldalignment . t) (nilness . t) (unusedwrite . t) (unusedparams . t))
+  (setq lsp-go-analyses '((nilness . t) (unusedwrite . t) (unusedparams . t))
         lsp-go-use-gofumpt t)) ; Use the stricter 'gofumpt' formatter.
 
 ;; --- SQL (sql-language-server) ---
