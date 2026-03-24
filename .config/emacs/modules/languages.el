@@ -136,9 +136,7 @@
 (use-package web-mode
   :ensure t
   :mode (("\\.html?\\'" . web-mode)
-         ("\\.twig\\'" . web-mode)
-         ("\\.jsx\\'" . web-mode)
-         ("\\.tsx\\'" . web-mode))
+         ("\\.twig\\'" . web-mode))
   :hook ((web-mode . lsp-deferred)
          (web-mode . apheleia-mode))
   :config
@@ -153,6 +151,7 @@
 
 (use-package python
   :ensure nil ; Built-in
+  :mode ("\\.py\\'" . python-ts-mode)
   :hook ((python-ts-mode . lsp-deferred)
          (python-ts-mode . apheleia-mode)
          ;; PEP 8 Standard: Enforce 4-space indents and no physical tabs.
@@ -256,6 +255,7 @@
 
 (use-package swift-mode
   :ensure t
+  :mode ("\\.swift\\'" . swift-ts-mode)
   :hook ((swift-ts-mode . lsp-deferred)
          (swift-ts-mode . apheleia-mode)
          (swift-ts-mode . flycheck-mode)))
@@ -311,8 +311,7 @@
 
 (use-package scala-ts-mode
   :ensure t
-  :mode(".scala" . scala-ts-mode)
-					;:interpreter ("scala" . scala-ts-mode)
+  :mode("\\.scala\\'" . scala-ts-mode)
   :hook ((scala-ts-mode . lsp-deferred)
          (scala-ts-mode . apheleia-mode)
          (scala-ts-mode . flycheck-mode)))
@@ -341,6 +340,7 @@
 
 (use-package sql
   :ensure nil ; Built-in
+  :mode ("\\.sql\\'" . sql-ts-mode)
   :hook ((sql-ts-mode . lsp-deferred)
          (sql-ts-mode . apheleia-mode)
          (sql-ts-mode . flycheck-mode))
@@ -367,11 +367,13 @@
 
 (use-package yaml-mode
   :ensure t
+  :mode ("\\.ya?ml\\'" . yaml-ts-mode)
   :hook ((yaml-ts-mode . lsp-deferred)
          (yaml-ts-mode . apheleia-mode)))
 
 (use-package json-mode
   :ensure t
+  :mode ("\\.json\\'" . json-ts-mode)
   :hook ((json-ts-mode . lsp-deferred)
          (json-ts-mode . apheleia-mode)))
 
@@ -385,6 +387,7 @@
 
 (use-package xml-mode
   :ensure nil
+  :mode("\\.xml\\'" . xml-ts-mode)
   :hook ((xml-ts-mode . lsp-deferred)
          (xml-ts-mode . apheleia-mode)))
 
@@ -394,7 +397,8 @@
 
 (use-package dockerfile-mode
   :ensure t
-  :mode "Dockerfile\\'")
+  :mode "Dockerfile\\'"
+  :hook (dockerfile-mode . flycheck-mode))
 
 (use-package docker-compose-mode
   :ensure t
@@ -417,6 +421,8 @@
 
 (use-package markdown-mode
   :ensure t
+  :mode (("\\.md\\'" . markdown-mode)
+         ("\\.markdown\\'" . markdown-mode))
   :hook ((markdown-mode . flycheck-mode)
          (markdown-mode . apheleia-mode))
   :preface
@@ -488,7 +494,14 @@
 ;; =============================================================================
 
 (use-package terraform-mode
-  :ensure t)
+  :ensure t
+  ;; Explicitly map both standard Terraform files and variables files
+  :mode (("\\.tf\\'" . terraform-mode)
+         ("\\.tfvars\\'" . terraform-mode))
+  ;; Boot up the language server, auto-formatter, and syntax checker
+  :hook ((terraform-mode . lsp-deferred)
+         (terraform-mode . apheleia-mode)
+         (terraform-mode . flycheck-mode)))
 
 (use-package supreme-dotenv
   :ensure (:host github :repo "J4VMC/supreme-dotenv"))

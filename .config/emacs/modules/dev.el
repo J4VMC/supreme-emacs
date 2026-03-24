@@ -238,7 +238,6 @@
 ;; --- Rust ---
 (defun jmc-rust-lsp-optimization ()
   "The ultimate rust-analyzer setup to prevent multi-server race conditions."
-  (setq-local lsp-disabled-clients '(semgrep-ls))
   (setq-local lsp-enable-on-type-formatting nil)
   (setq-local lsp-idle-delay 0.5))
 
@@ -256,8 +255,6 @@
 
 ;; --- Scala ---
 (defun jmc-scala-setup-h ()
-  "Optimize Scala workspace by disabling unnecessary clients."
-  (setq-local lsp-disabled-clients '(semgrep-ls))
   ;; Disable the buggy indicators that cause the "Node type error"
   (when (fboundp 'treesit-fold-indicators-mode)
     (treesit-fold-indicators-mode -1))
