@@ -79,7 +79,7 @@
   :config
   ;; --- 1. Define Custom Formatters ---
   (setf (alist-get 'phpcs-psr12 apheleia-formatters)
-        '("phpcbf" "--standard=PSR12" 
+        '("phpcbf" "--standard=PSR12"
           (concat "--stdin-path=" (or buffer-file-name "stdin"))))
   (setf (alist-get 'google-java-format apheleia-formatters) '("google-java-format" "-"))
   (setf (alist-get 'goimports apheleia-formatters) '("goimports"))
@@ -233,6 +233,24 @@
 
 (add-hook 'rust-ts-mode-hook #'jmc-rust-lsp-optimization)
 (add-hook 'rustic-mode-hook #'jmc-rust-lsp-optimization)
+
+;; Making sure Emacs sees ruby gems
+(when-let* ((gem-bin (condition-case nil
+                         (string-trim (shell-command-to-string "gem env user_gemdir"))
+                       (error nil)))
+            (bin-dir (expand-file-name "bin" gem-bin))
+            ((file-directory-p bin-dir)))
+  (add-to-list 'exec-path bin-dir)
+  (setenv "PATH" (concat bin-dir ":" (getenv "PATH"))))
+
+;; --- SQL ---
+;; We must use `hack-local-variables-hook` instead of `sql-mode-hook`.
+;; This forces Emacs to read your `.dir-locals.el` database connections
+;; BEFORE it attempts to boot up the `sqls` server.
+(add-hook 'hack-local-variables-hook
+          (lambda ()
+            (when (derived-mode-p 'sql-mode 'sql-ts-mode)
+              (lsp-deferred))))
 
 ;; =============================================================================
 ;; QUICK-RUN & PACKAGE-LINT
