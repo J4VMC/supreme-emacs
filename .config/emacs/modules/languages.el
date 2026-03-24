@@ -311,7 +311,8 @@
 
 (use-package scala-ts-mode
   :ensure t
-  :interpreter ("scala" . scala-ts-mode)
+  :mode(".scala" . scala-ts-mode)
+					;:interpreter ("scala" . scala-ts-mode)
   :hook ((scala-ts-mode . lsp-deferred)
          (scala-ts-mode . apheleia-mode)
          (scala-ts-mode . flycheck-mode)))
@@ -328,6 +329,15 @@
 ;; =============================================================================
 ;; DATA & DATABASES (SQL, MONGODB, REDIS)
 ;; =============================================================================
+
+;; Making sure Emacs sees ruby gems
+(when-let* ((gem-bin (condition-case nil
+                         (string-trim (shell-command-to-string "gem env user_gemdir"))
+                       (error nil)))
+            (bin-dir (expand-file-name "bin" gem-bin))
+            ((file-directory-p bin-dir)))
+  (add-to-list 'exec-path bin-dir)
+  (setenv "PATH" (concat bin-dir ":" (getenv "PATH"))))
 
 (use-package sql
   :ensure nil ; Built-in

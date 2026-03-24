@@ -73,6 +73,14 @@
 ;; AUTO-FORMATTING (APHELEIA)
 ;; =============================================================================
 
+;; Helper function for Scalafmt (Needs to be a function call, not a symbol)
+(defun jmc-find-scalafmt-conf ()
+  "Locate the .scalafmt.conf file in the project root."
+  (let ((dir (locate-dominating-file (or buffer-file-name default-directory) ".scalafmt.conf")))
+    (if dir
+        (expand-file-name ".scalafmt.conf" dir)
+      ".scalafmt.conf")))
+
 (use-package apheleia
   :ensure t
   :diminish ""
@@ -84,7 +92,10 @@
   (setf (alist-get 'google-java-format apheleia-formatters) '("google-java-format" "-"))
   (setf (alist-get 'goimports apheleia-formatters) '("goimports"))
   (setf (alist-get 'rustfmt apheleia-formatters) '("rustfmt" "--emit=stdout"))
-  (setf (alist-get 'scalafmt apheleia-formatters) '("scalafmt" "--stdin" "--stdout"))
+  (setf (alist-get 'scalafmt apheleia-formatters)
+        '("scalafmt" "--stdin" "--stdout"
+          "--config" (jmc-find-scalafmt-conf)
+          "--assume-filename" filepath))
   (setf (alist-get 'sql-formatter apheleia-formatters)
         '("sql-formatter" "--language" "postgresql" "--indent" "2" "--uppercase"))
 
@@ -234,15 +245,6 @@
 (add-hook 'rust-ts-mode-hook #'jmc-rust-lsp-optimization)
 (add-hook 'rustic-mode-hook #'jmc-rust-lsp-optimization)
 
-;; Making sure Emacs sees ruby gems
-(when-let* ((gem-bin (condition-case nil
-                         (string-trim (shell-command-to-string "gem env user_gemdir"))
-                       (error nil)))
-            (bin-dir (expand-file-name "bin" gem-bin))
-            ((file-directory-p bin-dir)))
-  (add-to-list 'exec-path bin-dir)
-  (setenv "PATH" (concat bin-dir ":" (getenv "PATH"))))
-
 ;; --- SQL ---
 ;; We must use `hack-local-variables-hook` instead of `sql-mode-hook`.
 ;; This forces Emacs to read your `.dir-locals.el` database connections
@@ -251,6 +253,19 @@
           (lambda ()
             (when (derived-mode-p 'sql-mode 'sql-ts-mode)
               (lsp-deferred))))
+
+;; --- Scala ---
+(defun jmc-scala-setup-h ()
+  "Optimize Scala workspace by disabling unnecessary clients."
+  (setq-local lsp-disabled-clients '(semgrep-ls))
+  ;; Disable the buggy indicators that cause the "Node type error"
+  (when (fboundp 'treesit-fold-indicators-mode)
+    (treesit-fold-indicators-mode -1))
+
+  ;; Enable Code Lenses specifically for Scala to allow 1-click debugging
+  (lsp-lens-mode 1))
+
+(add-hook 'scala-ts-mode-hook #'jmc-scala-setup-h)
 
 ;; =============================================================================
 ;; QUICK-RUN & PACKAGE-LINT
