@@ -117,29 +117,66 @@
   :hook ((typescript-ts-mode . lsp-deferred)
          (typescript-ts-mode . apheleia-mode)
          (typescript-ts-mode . flycheck-mode)
+         
          (tsx-ts-mode . lsp-deferred)
          (tsx-ts-mode . apheleia-mode)
          (tsx-ts-mode . flycheck-mode)
+         
          (js-ts-mode . lsp-deferred)
          (js-ts-mode . apheleia-mode)
-         (js-ts-mode . flycheck-mode))
+         (js-ts-mode . flycheck-mode)
+         
+         ;; --- THE FIX: Force spaces instead of tabs, and set width to 2 ---
+         (typescript-ts-mode . (lambda () (setq-local indent-tabs-mode nil tab-width 2)))
+         (tsx-ts-mode . (lambda () (setq-local indent-tabs-mode nil tab-width 2)))
+         (js-ts-mode . (lambda () (setq-local indent-tabs-mode nil tab-width 2))))
   :config
   ;; Standardize 2-space indentation for the JS ecosystem.
   (setq typescript-indent-level 2
         js-indent-level 2))
 
 ;; =============================================================================
-;; WEB TECHNOLOGIES (HTML, TWIG)
+;; WEB TECHNOLOGIES (HTML, TWIG, SVELTE, VUE)
 ;; =============================================================================
 
 ;; `web-mode` handles files that mix different languages (e.g., HTML + PHP).
+;; We also use it as the underlying parsing engine for Svelte and Vue components.
+
+;; 1. Define our custom modes explicitly so Emacs knows they exist.
+(define-derived-mode svelte-mode web-mode "Svelte")
+(define-derived-mode vue-mode web-mode "Vue")
+
+;; 2. Forcibly route the file extensions to them (bypassing use-package lazy loading).
+(add-to-list 'auto-mode-alist '("\\.svelte\\'" . svelte-mode))
+(add-to-list 'auto-mode-alist '("\\.vue\\'" . vue-mode))
+
 (use-package web-mode
   :ensure t
   :mode (("\\.html?\\'" . web-mode)
          ("\\.twig\\'" . web-mode))
   :hook ((web-mode . lsp-deferred)
-         (web-mode . apheleia-mode))
+         (web-mode . apheleia-mode)
+         (web-mode . (lambda () (setq-local indent-tabs-mode nil)))
+         
+         ;; --- SVELTE HOOKS ---
+         (svelte-mode . lsp-deferred)
+         (svelte-mode . apheleia-mode)
+         (svelte-mode . flycheck-mode)
+         (svelte-mode . (lambda ()
+                          (setq-local indent-tabs-mode nil)
+                          (setq-local lsp-disabled-clients (append lsp-disabled-clients '(eslint)))))
+         
+         ;; --- VUE HOOKS ---
+         (vue-mode . lsp-deferred)
+         (vue-mode . apheleia-mode)
+         (vue-mode . flycheck-mode)
+         (vue-mode . (lambda () (setq-local indent-tabs-mode nil))))
   :config
+  ;; Force web-mode to detect engines based on file extensions
+  (setq web-mode-enable-engine-detection t)
+  (add-to-list 'web-mode-engines-alist '("svelte" . "\\.svelte\\'"))
+  (add-to-list 'web-mode-engines-alist '("vue" . "\\.vue\\'"))
+
   ;; Enforce 2-space indents for HTML, CSS, and mixed code blocks.
   (setq web-mode-markup-indent-offset 2
         web-mode-css-indent-offset 2
@@ -150,15 +187,24 @@
 ;; =============================================================================
 
 (use-package python
-  :ensure nil ; Built-in
+  :ensure nil
   :mode ("\\.py\\'" . python-ts-mode)
   :hook ((python-ts-mode . lsp-deferred)
          (python-ts-mode . apheleia-mode)
-         ;; PEP 8 Standard: Enforce 4-space indents and no physical tabs.
+         
+         ;; Formatting
          (python-ts-mode . (lambda ()
                              (setq-local tab-width 4
                                          python-indent-offset 4
-                                         indent-tabs-mode nil))))
+                                         indent-tabs-mode nil)))
+                                         
+         ;; THE DAP FIX: Resolve the local .venv for DAP so dap-python-executable
+         ;; is always a real absolute string, never nil, when the debugger starts.
+         (python-ts-mode . (lambda ()
+                             (when-let* ((venv-root (locate-dominating-file default-directory ".venv"))
+                                         (python-bin (expand-file-name ".venv/bin/python" venv-root)))
+                               (when (file-executable-p python-bin)
+                                 (setq-local dap-python-executable python-bin))))))
   :preface
   ;; --- Custom Python Helpers ---
   (defun python-flask-run ()
@@ -206,343 +252,336 @@
     (unless (string-equal (getenv "VIRTUAL_ENV") venv-path)
       (pyvenv-activate venv-path))))
 
-(use-package pyvenv
-  :ensure t
-  :defer t
-  :config
-  (add-hook 'python-mode-hook #'pyvenv-mode)
-  (add-hook 'python-mode-hook #'jmc-python-venv-autoload-h)
-  (add-hook 'projectile-after-switch-project-hook #'jmc-python-venv-autoload-h))
+  (use-package pyvenv
+    :ensure t
+    :defer t
+    :config
+    (add-hook 'python-mode-hook #'pyvenv-mode)
+    (add-hook 'python-mode-hook #'jmc-python-venv-autoload-h)
+    (add-hook 'projectile-after-switch-project-hook #'jmc-python-venv-autoload-h))
 
-;; Pytest: Standardized testing interface.
-(use-package python-pytest
-  :ensure t
-  :after python
-  :commands (python-pytest-dispatch python-pytest-file python-pytest-function))
+  ;; Pytest: Standardized testing interface.
+  (use-package python-pytest
+    :ensure t
+    :after python
+    :commands (python-pytest-dispatch python-pytest-file python-pytest-function))
 
-;; Django: Enable specialized features if `manage.py` is present.
-(use-package python-django
-  :ensure t
-  :defer t
-  :hook ((python-ts-mode . (lambda ()
-                             (when (locate-dominating-file default-directory "manage.py")
-                               (python-django-mode 1))))))
+  ;; Django: Enable specialized features if `manage.py` is present.
+  (use-package python-django
+    :ensure t
+    :defer t
+    :hook ((python-ts-mode . (lambda ()
+                               (when (locate-dominating-file default-directory "manage.py")
+			       (python-django-mode 1))))))
 
-;; =============================================================================
-;; MODERN FRAMEWORKS & LANGUAGES (SVELTE, GO, SWIFT)
-;; =============================================================================
+  ;; =============================================================================
+  ;; MODERN FRAMEWORKS & LANGUAGES (GO, SWIFT)
+  ;; =============================================================================
 
-(use-package svelte-mode
-  :ensure t
-  :mode ("\\.svelte\\'" . svelte-mode)
-  :hook ((svelte-mode . lsp-deferred)
-         (svelte-mode . apheleia-mxode)
-         (svelte-mode . flycheck-mode)))
+  ;; Force Emacs to see the Go binaries directory
+  (let ((go-bin (expand-file-name "~/go/bin")))
+    (when (file-directory-p go-bin)
+      (add-to-list 'exec-path go-bin)
+      (setenv "PATH" (concat go-bin ":" (getenv "PATH")))))
 
-;; Force Emacs to see the Go binaries directory
-(let ((go-bin (expand-file-name "~/go/bin")))
-  (when (file-directory-p go-bin)
-    (add-to-list 'exec-path go-bin)
-    (setenv "PATH" (concat go-bin ":" (getenv "PATH")))))
+  (use-package go-mode
+    :ensure t
+    :mode("\\.go\\'" . go-ts-mode)
+    :hook ((go-ts-mode . lsp-deferred)
+           (go-ts-mode . apheleia-mode)
+           (go-ts-mode . flycheck-mode))
+    :config)
 
-(use-package go-mode
-  :ensure t
-  :mode("\\.go\\'" . go-ts-mode)
-  :hook ((go-ts-mode . lsp-deferred)
-         (go-ts-mode . apheleia-mode)
-         (go-ts-mode . flycheck-mode))
-  :config)
+  (use-package swift-mode
+    :ensure t
+    :mode ("\\.swift\\'" . swift-ts-mode)
+    :hook ((swift-ts-mode . lsp-deferred)
+           (swift-ts-mode . apheleia-mode)
+           (swift-ts-mode . flycheck-mode)))
 
-(use-package swift-mode
-  :ensure t
-  :mode ("\\.swift\\'" . swift-ts-mode)
-  :hook ((swift-ts-mode . lsp-deferred)
-         (swift-ts-mode . apheleia-mode)
-         (swift-ts-mode . flycheck-mode)))
+  ;; =============================================================================
+  ;; RUST (VIA RUSTIC)
+  ;; =============================================================================
 
-;; =============================================================================
-;; RUST (VIA RUSTIC)
-;; =============================================================================
+  (use-package rustic
+    :ensure t
+    :mode ("\\.rs\\'" . rustic-mode)
+    :hook ((rustic-mode . lsp-deferred)
+           (rustic-mode . apheleia-mode)
+           (rustic-mode . flycheck-mode))
+    :bind (:map rustic-mode-map
+		("C-c C-c l" . flycheck-list-errors)
+		("C-c C-c a" . lsp-execute-code-action)
+		("C-c C-c r" . lsp-rename)
+		("C-c C-d"   . dap-hydra)
+		("M-."       . lsp-find-definition)
+		("M-,"       . pop-tag-mark)
+		("M-?"       . lsp-find-references)
+		("C-c C-c h" . lsp-documentation)
+		("M-j"       . lsp-ui-imenu)
+		("C-c C-c s" . lsp-rust-analyzer-status)
+		("C-c C-c e" . lsp-rust-analyzer-expand-macro)
+		("C-c C-c j" . lsp-rust-analyzer-join-lines)
+		("C-c C-c q" . lsp-workspace-restart)
+		("C-c C-c Q" . lsp-workspace-shutdown))
+    :config
+    ;; Disable rustic's default formatter in favor of global `apheleia-mode`.
+    (setq rustic-format-on-save nil)
+    (setq rustic-lsp-client 'lsp-mode)
+    (setq rustic-use-tree-sitter t)
+    ;; Use `clippy` for deeper code analysis and linting.
+    (setq rustic-flycheck-checker 'rustic-clippy)
 
-(use-package rustic
-  :ensure t
-  :mode ("\\.rs\\'" . rustic-mode)
-  :hook ((rustic-mode . lsp-deferred)
-         (rustic-mode . apheleia-mode)
-         (rustic-mode . flycheck-mode))
-  :bind (:map rustic-mode-map
-              ("C-c C-c l" . flycheck-list-errors)
-              ("C-c C-c a" . lsp-execute-code-action)
-              ("C-c C-c r" . lsp-rename)
-              ("C-c C-d"   . dap-hydra)
-              ("M-."       . lsp-find-definition)
-              ("M-,"       . pop-tag-mark)
-              ("M-?"       . lsp-find-references)
-              ("C-c C-c h" . lsp-documentation)
-              ("M-j"       . lsp-ui-imenu)
-              ("C-c C-c s" . lsp-rust-analyzer-status)
-              ("C-c C-c e" . lsp-rust-analyzer-expand-macro)
-              ("C-c C-c j" . lsp-rust-analyzer-join-lines)
-              ("C-c C-c q" . lsp-workspace-restart)
-              ("C-c C-c Q" . lsp-workspace-shutdown))
-  :config
-  ;; Disable rustic's default formatter in favor of global `apheleia-mode`.
-  (setq rustic-format-on-save nil)
-  (setq rustic-lsp-client 'lsp-mode)
-  (setq rustic-use-tree-sitter t)
-  ;; Use `clippy` for deeper code analysis and linting.
-  (setq rustic-flycheck-checker 'rustic-clippy)
+    ;; --- Inlay Hints (Visual Type Annotations) ---
+    (setq rustic-analyzer-proc-macro-enable t)
+    (setq rustic-display-inlay-hints t)
+    (setq rustic-analyzer-display-chaining-hints t)
+    (setq rustic-analyzer-display-closure-return-type-hints t)
+    (setq rustic-analyzer-display-lifetime-elision-hints-enable "skip_trivial"))
 
-  ;; --- Inlay Hints (Visual Type Annotations) ---
-  (setq rustic-analyzer-proc-macro-enable t)
-  (setq rustic-display-inlay-hints t)
-  (setq rustic-analyzer-display-chaining-hints t)
-  (setq rustic-analyzer-display-closure-return-type-hints t)
-  (setq rustic-analyzer-display-lifetime-elision-hints-enable "skip_trivial"))
+  ;; Cargo: Minor mode for Rust's build system and dependency manager.
+  (use-package cargo
+    :ensure t
+    :hook (rustic-mode . cargo-minor-mode))
 
-;; Cargo: Minor mode for Rust's build system and dependency manager.
-(use-package cargo
-  :ensure t
-  :hook (rustic-mode . cargo-minor-mode))
+  ;; =============================================================================
+  ;; SCALA
+  ;; =============================================================================
 
-;; =============================================================================
-;; SCALA
-;; =============================================================================
+  (use-package scala-ts-mode
+    :ensure t
+    :mode("\\.scala\\'" . scala-ts-mode)
+    :hook ((scala-ts-mode . lsp-deferred)
+           (scala-ts-mode . apheleia-mode)
+           (scala-ts-mode . flycheck-mode)))
 
-(use-package scala-ts-mode
-  :ensure t
-  :mode("\\.scala\\'" . scala-ts-mode)
-  :hook ((scala-ts-mode . lsp-deferred)
-         (scala-ts-mode . apheleia-mode)
-         (scala-ts-mode . flycheck-mode)))
+  ;; SBT: Scala Build Tool integration.
+  (use-package sbt-mode
+    :commands sbt-start sbt-command
+    :config
+    ;; Fix: Allow space key usage in sbt-command prompts.
+    (substitute-key-definition 'minibuffer-complete-word 'self-insert-command minibuffer-local-completion-map)
+    ;; Fix: Disable supershell to prevent UI corruption in Emacs.
+    (setq sbt:program-options '("-Dsbt.supershell=false")))
 
-;; SBT: Scala Build Tool integration.
-(use-package sbt-mode
-  :commands sbt-start sbt-command
-  :config
-  ;; Fix: Allow space key usage in sbt-command prompts.
-  (substitute-key-definition 'minibuffer-complete-word 'self-insert-command minibuffer-local-completion-map)
-  ;; Fix: Disable supershell to prevent UI corruption in Emacs.
-  (setq sbt:program-options '("-Dsbt.supershell=false")))
+  ;; =============================================================================
+  ;; DATA & DATABASES (SQL, MONGODB, REDIS)
+  ;; =============================================================================
 
-;; =============================================================================
-;; DATA & DATABASES (SQL, MONGODB, REDIS)
-;; =============================================================================
+  ;; Making sure Emacs sees ruby gems
+  (when-let* ((gem-bin (condition-case nil
+                           (string-trim (shell-command-to-string "gem env user_gemdir"))
+			 (error nil)))
+              (bin-dir (expand-file-name "bin" gem-bin))
+              ((file-directory-p bin-dir)))
+    (add-to-list 'exec-path bin-dir)
+    (setenv "PATH" (concat bin-dir ":" (getenv "PATH"))))
 
-;; Making sure Emacs sees ruby gems
-(when-let* ((gem-bin (condition-case nil
-                         (string-trim (shell-command-to-string "gem env user_gemdir"))
-                       (error nil)))
-            (bin-dir (expand-file-name "bin" gem-bin))
-            ((file-directory-p bin-dir)))
-  (add-to-list 'exec-path bin-dir)
-  (setenv "PATH" (concat bin-dir ":" (getenv "PATH"))))
+  (use-package sql
+    :ensure nil ; Built-in
+    :mode ("\\.sql\\'" . sql-ts-mode)
+    :hook ((sql-ts-mode . lsp-deferred)
+           (sql-ts-mode . apheleia-mode)
+           (sql-ts-mode . flycheck-mode))
+    :bind (:map sql-mode-map ("C-c C-d" . sql-connect))
+    :config
+    (setq sql-product 'postgres))
 
-(use-package sql
-  :ensure nil ; Built-in
-  :mode ("\\.sql\\'" . sql-ts-mode)
-  :hook ((sql-ts-mode . lsp-deferred)
-         (sql-ts-mode . apheleia-mode)
-         (sql-ts-mode . flycheck-mode))
-  :bind (:map sql-mode-map ("C-c C-d" . sql-connect))
-  :config
-  (setq sql-product 'postgres))
+  (use-package mongo
+    :ensure t
+    :mode ("\\.mongodb\\'" . mongodb-mode)
+    :config
+    ;; Use the modern 'mongosh' shell.
+    (setq mongo-shell-program "mongosh"))
 
-(use-package mongo
-  :ensure t
-  :mode ("\\.mongodb\\'" . mongodb-mode)
-  :config
-  ;; Use the modern 'mongosh' shell.
-  (setq mongo-shell-program "mongosh"))
+  (use-package redis
+    :ensure t
+    :defer t
+    :config
+    (require 'bookmark))
 
-(use-package redis
-  :ensure t
-  :defer t
-  :config
-  (require 'bookmark))
+  ;; =============================================================================
+  ;; STRUCTURED DATA (YAML, JSON, CSV, XML)
+  ;; =============================================================================
 
-;; =============================================================================
-;; STRUCTURED DATA (YAML, JSON, CSV, XML)
-;; =============================================================================
+  (use-package yaml-mode
+    :ensure t
+    :mode ("\\.ya?ml\\'" . yaml-ts-mode)
+    :hook ((yaml-ts-mode . lsp-deferred)
+           (yaml-ts-mode . apheleia-mode)))
 
-(use-package yaml-mode
-  :ensure t
-  :mode ("\\.ya?ml\\'" . yaml-ts-mode)
-  :hook ((yaml-ts-mode . lsp-deferred)
-         (yaml-ts-mode . apheleia-mode)))
+  (use-package json-mode
+    :ensure t
+    :mode ("\\.json\\'" . json-ts-mode)
+    :hook ((json-ts-mode . lsp-deferred)
+           (json-ts-mode . apheleia-mode)))
 
-(use-package json-mode
-  :ensure t
-  :mode ("\\.json\\'" . json-ts-mode)
-  :hook ((json-ts-mode . lsp-deferred)
-         (json-ts-mode . apheleia-mode)))
+  (use-package csv-mode
+    :ensure t
+    :mode ("\\.csv\\'" . csv-mode)
+    :bind (:map csv-mode-map
+		("TAB" . csv-next-field)
+		("<tab>" . csv-next-field)
+		("<backtab>" . csv-previous-field)))
 
-(use-package csv-mode
-  :ensure t
-  :mode ("\\.csv\\'" . csv-mode)
-  :bind (:map csv-mode-map
-              ("TAB" . csv-next-field)
-              ("<tab>" . csv-next-field)
-              ("<backtab>" . csv-previous-field)))
+  (use-package xml-mode
+    :ensure nil
+    :mode("\\.xml\\'" . xml-ts-mode)
+    :hook ((xml-ts-mode . lsp-deferred)
+           (xml-ts-mode . apheleia-mode)))
 
-(use-package xml-mode
-  :ensure nil
-  :mode("\\.xml\\'" . xml-ts-mode)
-  :hook ((xml-ts-mode . lsp-deferred)
-         (xml-ts-mode . apheleia-mode)))
+  ;; =============================================================================
+  ;; DOCKER & CONTAINERS
+  ;; =============================================================================
 
-;; =============================================================================
-;; DOCKER & CONTAINERS
-;; =============================================================================
+  (use-package dockerfile-mode
+    :ensure t
+    :mode "Dockerfile\\'"
+    :hook (dockerfile-mode . flycheck-mode))
 
-(use-package dockerfile-mode
-  :ensure t
-  :mode "Dockerfile\\'"
-  :hook (dockerfile-mode . flycheck-mode))
+  (use-package docker-compose-mode
+    :ensure t
+    :mode "compose.*\\.ya?ml\\'")
 
-(use-package docker-compose-mode
-  :ensure t
-  :mode "compose.*\\.ya?ml\\'")
+  ;; Management UI for Docker containers and images.
+  (use-package docker
+    :ensure t
+    :commands (docker)
+    :bind ("C-c d" . docker))
 
-;; Management UI for Docker containers and images.
-(use-package docker
-  :ensure t
-  :commands (docker)
-  :bind ("C-c d" . docker))
+  ;; =============================================================================
+  ;; MARKDOWN (WITH LIVE PREVIEW)
+  ;; =============================================================================
+  ;;
+  ;; 
+  ;;
+  ;; This configuration uses `pandoc` to convert Markdown to HTML and renders it
+  ;; in a local `eww` browser buffer that updates automatically as you type.
 
-;; =============================================================================
-;; MARKDOWN (WITH LIVE PREVIEW)
-;; =============================================================================
-;;
-;; 
-;;
-;; This configuration uses `pandoc` to convert Markdown to HTML and renders it
-;; in a local `eww` browser buffer that updates automatically as you type.
+  (use-package markdown-mode
+    :ensure t
+    :mode (("\\.md\\'" . markdown-mode)
+           ("\\.markdown\\'" . markdown-mode))
+    :hook ((markdown-mode . flycheck-mode)
+           (markdown-mode . apheleia-mode))
+    :preface
+    ;; --- Preview Engine ---
 
-(use-package markdown-mode
-  :ensure t
-  :mode (("\\.md\\'" . markdown-mode)
-         ("\\.markdown\\'" . markdown-mode))
-  :hook ((markdown-mode . flycheck-mode)
-         (markdown-mode . apheleia-mode))
-  :preface
-  ;; --- Preview Engine ---
+    (defvar jmc-markdown-preview-buffer "*markdown-preview-eww*"
+      "Internal buffer name for HTML rendering.")
 
-  (defvar jmc-markdown-preview-buffer "*markdown-preview-eww*"
-    "Internal buffer name for HTML rendering.")
-
-  (defun jmc-markdown-preview--render ()
-    "Convert current Markdown to HTML and refresh the eww buffer."
-    (let* ((markdown-buffer (current-buffer))
-           (html-output
-            (with-temp-buffer
-              (insert-buffer-substring markdown-buffer)
-              (call-process-region (point-min) (point-max) "pandoc" t t nil "-f" "markdown" "-t" "html" "-s")
-              (buffer-string))))
-      (when (and html-output (> (length html-output) 0))
-        (with-current-buffer (get-buffer-create jmc-markdown-preview-buffer)
-          (eww-mode)
-          (let ((inhibit-read-only t))
-            (erase-buffer)
-            (insert html-output)
-            (let ((document (libxml-parse-html-region (point-min) (point-max))))
+    (defun jmc-markdown-preview--render ()
+      "Convert current Markdown to HTML and refresh the eww buffer."
+      (let* ((markdown-buffer (current-buffer))
+             (html-output
+              (with-temp-buffer
+		(insert-buffer-substring markdown-buffer)
+		(call-process-region (point-min) (point-max) "pandoc" t t nil "-f" "markdown" "-t" "html" "-s")
+		(buffer-string))))
+	(when (and html-output (> (length html-output) 0))
+          (with-current-buffer (get-buffer-create jmc-markdown-preview-buffer)
+            (eww-mode)
+            (let ((inhibit-read-only t))
               (erase-buffer)
-              (shr-insert-document document)))))))
+              (insert html-output)
+              (let ((document (libxml-parse-html-region (point-min) (point-max))))
+		(erase-buffer)
+		(shr-insert-document document)))))))
 
-  (defun jmc-markdown-preview-split ()
-    "Launch side-by-side live preview."
-    (interactive)
-    (delete-other-windows)
-    (split-window-right)
-    (jmc-markdown-preview--render)
-    (other-window 1)
-    (switch-to-buffer jmc-markdown-preview-buffer)
-    (other-window -1)
-    (jmc-markdown-preview-live-start))
+    (defun jmc-markdown-preview-split ()
+      "Launch side-by-side live preview."
+      (interactive)
+      (delete-other-windows)
+      (split-window-right)
+      (jmc-markdown-preview--render)
+      (other-window 1)
+      (switch-to-buffer jmc-markdown-preview-buffer)
+      (other-window -1)
+      (jmc-markdown-preview-live-start))
 
-  (defvar jmc-markdown-preview--timer nil)
+    (defvar jmc-markdown-preview--timer nil)
 
-  (defun jmc-markdown-preview--update ()
-    "Refresh if the buffer is modified and preview window is visible."
-    (when (and (buffer-modified-p) (get-buffer-window jmc-markdown-preview-buffer))
-      (jmc-markdown-preview--render)))
+    (defun jmc-markdown-preview--update ()
+      "Refresh if the buffer is modified and preview window is visible."
+      (when (and (buffer-modified-p) (get-buffer-window jmc-markdown-preview-buffer))
+	(jmc-markdown-preview--render)))
 
-  (defun jmc-markdown-preview-live-start ()
-    "Initialize the idle timer for auto-updates."
-    (interactive)
-    (unless jmc-markdown-preview--timer
-      (setq jmc-markdown-preview--timer (run-with-idle-timer 1.0 t #'jmc-markdown-preview--update))))
+    (defun jmc-markdown-preview-live-start ()
+      "Initialize the idle timer for auto-updates."
+      (interactive)
+      (unless jmc-markdown-preview--timer
+	(setq jmc-markdown-preview--timer (run-with-idle-timer 1.0 t #'jmc-markdown-preview--update))))
 
-  (defun jmc-markdown-preview-live-stop ()
-    "Halt the preview engine and cleanup buffers."
-    (interactive)
-    (when jmc-markdown-preview--timer
-      (cancel-timer jmc-markdown-preview--timer)
-      (setq jmc-markdown-preview--timer nil))
-    (when-let ((buffer (get-buffer jmc-markdown-preview-buffer)))
-      (kill-buffer buffer)))
-  :config
-  (setq markdown-fontify-code-blocks-natively t)
-  (setq markdown-command "pandoc")
+    (defun jmc-markdown-preview-live-stop ()
+      "Halt the preview engine and cleanup buffers."
+      (interactive)
+      (when jmc-markdown-preview--timer
+	(cancel-timer jmc-markdown-preview--timer)
+	(setq jmc-markdown-preview--timer nil))
+      (when-let ((buffer (get-buffer jmc-markdown-preview-buffer)))
+	(kill-buffer buffer)))
+    :config
+    (setq markdown-fontify-code-blocks-natively t)
+    (setq markdown-command "pandoc")
 
-  ;; Shortcuts: C-c p (Start), C-c P (Stop).
-  (define-key markdown-mode-map (kbd "C-c p") #'jmc-markdown-preview-split)
-  (define-key markdown-mode-map (kbd "C-c P") #'jmc-markdown-preview-live-stop))
+    ;; Shortcuts: C-c p (Start), C-c P (Stop).
+    (define-key markdown-mode-map (kbd "C-c p") #'jmc-markdown-preview-split)
+    (define-key markdown-mode-map (kbd "C-c P") #'jmc-markdown-preview-live-stop))
 
-;; =============================================================================
-;; DEVOPS & ENVIRONMENTS (TERRAFORM, DOTENV)
-;; =============================================================================
+  ;; =============================================================================
+  ;; DEVOPS & ENVIRONMENTS (TERRAFORM, DOTENV)
+  ;; =============================================================================
 
-(use-package terraform-mode
-  :ensure t
-  ;; Explicitly map both standard Terraform files and variables files
-  :mode (("\\.tf\\'" . terraform-mode)
-         ("\\.tfvars\\'" . terraform-mode))
-  ;; Boot up the language server, auto-formatter, and syntax checker
-  :hook ((terraform-mode . lsp-deferred)
-         (terraform-mode . apheleia-mode)
-         (terraform-mode . flycheck-mode)))
+  (use-package terraform-mode
+    :ensure t
+    ;; Explicitly map both standard Terraform files and variables files
+    :mode (("\\.tf\\'" . terraform-mode)
+           ("\\.tfvars\\'" . terraform-mode))
+    ;; Boot up the language server, auto-formatter, and syntax checker
+    :hook ((terraform-mode . lsp-deferred)
+           (terraform-mode . apheleia-mode)
+           (terraform-mode . flycheck-mode)))
 
-(use-package supreme-dotenv
-  :ensure (:host github :repo "J4VMC/supreme-dotenv"))
+  (use-package supreme-dotenv
+    :ensure (:host github :repo "J4VMC/supreme-dotenv"))
 
-;; =============================================================================
-;; SHELL SUPPORT (FISH)
-;; =============================================================================
+  ;; =============================================================================
+  ;; SHELL SUPPORT (FISH)
+  ;; =============================================================================
 
-;; Provides syntax highlighting and indentation for .fish script files.
-;; -> Useful if you use Fish as your interactive shell (configured below).
-(use-package fish-mode
-  :ensure t
-  :mode "\\.fish\\'"
-  :hook ((fish-mode . apheleia-mode)
-         (fish-mode . flycheck-mode)))
+  ;; Provides syntax highlighting and indentation for .fish script files.
+  ;; -> Useful if you use Fish as your interactive shell (configured below).
+  (use-package fish-mode
+    :ensure t
+    :mode "\\.fish\\'"
+    :hook ((fish-mode . apheleia-mode)
+           (fish-mode . flycheck-mode)))
 
-;; Provides modern Tree-sitter syntax highlighting and LSP integration for shell scripts.
-;; -> Requires `bash-language-server`, `shellcheck`, and `shfmt` installed on your OS.
-(use-package sh-script
-  :ensure nil ; Built-in
-  :mode (("\\.sh\\'" . bash-ts-mode)
-         ("\\.bash\\'" . bash-ts-mode)
-         ("bashrc\\'" . bash-ts-mode)
-         ("zshrc\\'" . bash-ts-mode))
-  :hook ((bash-ts-mode . lsp-deferred)
-         (bash-ts-mode . apheleia-mode)
-         (bash-ts-mode . flycheck-mode))
-  :config
-  (setq sh-basic-offset 4))
+  ;; Provides modern Tree-sitter syntax highlighting and LSP integration for shell scripts.
+  ;; -> Requires `bash-language-server`, `shellcheck`, and `shfmt` installed on your OS.
+  (use-package sh-script
+    :ensure nil ; Built-in
+    :mode (("\\.sh\\'" . bash-ts-mode)
+           ("\\.bash\\'" . bash-ts-mode)
+           ("bashrc\\'" . bash-ts-mode)
+           ("zshrc\\'" . bash-ts-mode))
+    :hook ((bash-ts-mode . lsp-deferred)
+           (bash-ts-mode . apheleia-mode)
+           (bash-ts-mode . flycheck-mode))
+    :config
+    (setq sh-basic-offset 4))
 
-(use-package docstr
-  :ensure t
-  :hook ((php-ts-mode typescript-ts-mode tsx-ts-mode js-ts-mode python-ts-mode go-ts-mode
-		      rustic-mode scala-ts-mode)
-         . docstr-mode))
+  (use-package docstr
+    :ensure t
+    :hook ((php-ts-mode typescript-ts-mode tsx-ts-mode js-ts-mode python-ts-mode go-ts-mode
+			rustic-mode scala-ts-mode)
+           . docstr-mode))
 
-;; =============================================================================
-;; FINALIZE
-;; =============================================================================
+  ;; =============================================================================
+  ;; FINALIZE
+  ;; =============================================================================
 
-;; This line tells Emacs that the 'languages' module is successfully loaded.
-(provide 'languages)
+  ;; This line tells Emacs that the 'languages' module is successfully loaded.
+  (provide 'languages)
 
 ;;; languages.el ends here

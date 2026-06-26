@@ -2,185 +2,239 @@
 
 ;;; Commentary:
 ;;
-;; This file configures `dap-mode` (Debug Adapter Protocol).
+;; This file configures `dape` (Debug Adapter Protocol for Emacs).
+;; It replaces `dap-mode` with a native, lightweight, and strictly declarative
+;; configuration architecture based on Emacs 29+ JSON-RPC.
 ;;
 ;; Key frameworks supported:
 ;; 1. PHP: Symfony (Docker Skeleton), Laravel (Sail), Laminas (Local).
 ;; 2. Go: Delve (dlv).
-;; 3. Python: debugpy (Flask, Django, FastAPI).
-;; 4. JS/TS: Node.js.
+;; 3. Python: debugpy (Flask, Django).
+;; 4. JS/TS: Node.js, NPM Scripts, Chrome Frontend.
 ;; 5. Rust/C++: LLDB.
 ;;
 ;;; Code:
 
-;; =============================================================================
-;; COMPILER DECLARATIONS
-;; =============================================================================
-
 (defvar jmc-dap-prefix-map)
-(defvar dap-python-executable)
-(defvar dap-print-io)
-
-(declare-function dap-breakpoint-toggle "dap-mode")
-(declare-function dap-breakpoint-delete-all "dap-mode")
-(declare-function dap-debug "dap-mode")
-(declare-function dap-next "dap-mode")
-(declare-function dap-step-in "dap-mode")
-(declare-function dap-step-out "dap-mode")
-(declare-function dap-continue "dap-mode")
-(declare-function dap-debug-edit-template "dap-mode")
-(declare-function dap-switch-stack-frame "dap-mode")
-(declare-function dap-debug-last "dap-mode")
-(declare-function dap-disconnect "dap-mode")
-(declare-function dap-debug-recent "dap-mode")
-(declare-function dap-gdb-lldb-setup "dap-gdb-lldb")
-(declare-function dap-register-debug-template "dap-mode")
-(declare-function dap-hydra "dap-hydra")
-(declare-function dap-ui-controls-mode "dap-ui")
 
 ;; =============================================================================
-;; DAP MODE CORE
+;; UTILITY FUNCTIONS
 ;; =============================================================================
 
-(use-package dap-mode
+(defun jmc-get-workspace-root ()
+  "Safely grab the project root, falling back to the current directory.
+This replaces internal dape functions to ensure update-proof stability."
+  (if-let ((proj (project-current)))
+      (expand-file-name (project-root proj))
+    (expand-file-name default-directory)))
+
+(defun jmc-python-venv-bin ()
+  "Helper to find the local .venv python binary for Dape."
+  (let ((venv (locate-dominating-file default-directory ".venv")))
+    (if venv (expand-file-name ".venv/bin/python" venv) "python3")))
+
+;; =============================================================================
+;; DAPE CORE & KEYBINDINGS
+;; =============================================================================
+
+(use-package dape
   :ensure t
-  :after lsp-mode
   :init
   ;; --- Keybinding Setup ---
+  ;; We keep your exact C-c d prefix, but map it to dape's native functions.
   (define-prefix-command 'jmc-dap-prefix-map)
   (global-set-key (kbd "C-c d") 'jmc-dap-prefix-map)
 
-  (define-key jmc-dap-prefix-map (kbd "b") #'dap-breakpoint-toggle)
-  (define-key jmc-dap-prefix-map (kbd "B") #'dap-breakpoint-delete-all)
-  (define-key jmc-dap-prefix-map (kbd "d") #'dap-debug)
-  (define-key jmc-dap-prefix-map (kbd "n") #'dap-next)
-  (define-key jmc-dap-prefix-map (kbd "i") #'dap-step-in)
-  (define-key jmc-dap-prefix-map (kbd "o") #'dap-step-out)
-  (define-key jmc-dap-prefix-map (kbd "c") #'dap-continue)
-  (define-key jmc-dap-prefix-map (kbd "e") #'dap-debug-edit-template)
-  (define-key jmc-dap-prefix-map (kbd "w") #'dap-switch-stack-frame)
-  (define-key jmc-dap-prefix-map (kbd "l") #'dap-debug-last)
-  (define-key jmc-dap-prefix-map (kbd "r") #'dap-disconnect)
-  (define-key jmc-dap-prefix-map (kbd "R") #'dap-debug-recent)
-
-  :hook
-  ((lsp-mode . dap-mode)
-   (lsp-mode . dap-ui-mode))
+  (define-key jmc-dap-prefix-map (kbd "d") #'dape)
+  (define-key jmc-dap-prefix-map (kbd "r") #'dape-quit)
+  (define-key jmc-dap-prefix-map (kbd "b") #'dape-breakpoint-toggle)
+  (define-key jmc-dap-prefix-map (kbd "B") #'dape-breakpoint-remove-all)
+  (define-key jmc-dap-prefix-map (kbd "c") #'dape-continue)
+  (define-key jmc-dap-prefix-map (kbd "n") #'dape-next)
+  (define-key jmc-dap-prefix-map (kbd "i") #'dape-step-in)
+  (define-key jmc-dap-prefix-map (kbd "o") #'dape-step-out)
+  (define-key jmc-dap-prefix-map (kbd "w") #'dape-info)
+  (define-key jmc-dap-prefix-map (kbd "R") #'dape-restart)
 
   :config
-  ;; Load UI and controls
-  (require 'dap-ui)
-  (dap-ui-mode 1)
-  (dap-ui-controls-mode 1)
+  ;; --- UI Config ---
+  ;; Show the info buffers (locals, breakpoints, stack) in the right window
+  (add-to-list 'display-buffer-alist
+	       '("\\*dape-info\\*"
+		 (display-buffer-in-side-window)
+		 (side . right)
+		 (window-width . 0.30)))
 
-  ;; Setup Hydra to pop up when the debugger stops at a breakpoint
-  (add-hook 'dap-stopped-hook (lambda (_arg) (call-interactively #'dap-hydra))))
+  ;; Automatically open the info window when debugging starts
+  (add-hook 'dape-start-hook (lambda () (dape-info)))
 
-;; =============================================================================
-;; LANGUAGE-SPECIFIC ADAPTERS & TEMPLATES
-;; =============================================================================
+  ;; Kill the info window when debugging ends
+  (add-hook 'dape-kill-hook
+	    (lambda ()
+	      (when-let ((buf (get-buffer "*dape-info*")))
+		(kill-buffer buf))))
 
-;; --- PHP (Symfony, Laravel, Laminas) ---
-(use-package dap-php
-  :ensure nil
-  :after dap-mode
-  :hook (php-ts-mode . dap-php-setup)
-  :config
-  ;; 1. Local Development (Symfony CLI, Artisan Serve, Laminas Local)
-  (dap-register-debug-template "PHP :: Listen for XDebug (Local)"
-			       (list :type "php"
-				     :request "launch"
-				     :name "PHP :: Listen for XDebug (Local)"
-				     :port 9003
-				     :sourceMaps t))
+  ;; Enable inline variable values in your code while debugging
+  (setq dape-inlay-hints t)
 
-  ;; 2. Symfony Docker Skeleton (Official)
-  ;; Maps the container's WORKDIR /app to your local workspace.
-  (dap-register-debug-template "PHP :: Symfony Docker (Skeleton)"
-			       (list :type "php"
-				     :request "launch"
-				     :name "PHP :: Symfony Docker (Skeleton)"
-				     :port 9003
-				     :pathMappings (ht ("/app" "${workspaceFolder}"))
-				     :hostname "0.0.0.0"
-				     :sourceMaps t))
+  ;; =============================================================================
+  ;; LANGUAGE ADAPTER CONFIGURATIONS
+  ;; =============================================================================
 
-  ;; 3. Laravel Sail / Generic Docker
-  ;; Laravel Sail typically uses /var/www/html.
-  (dap-register-debug-template "PHP :: Laravel Sail"
-			       (list :type "php"
-				     :request "launch"
-				     :name "PHP :: Laravel Sail"
-				     :port 9003
-				     :pathMappings (ht ("/var/www/html" "${workspaceFolder}"))
-				     :sourceMaps t)))
+  ;; --------------------------------------------------------------
+  ;; PHP (Symfony, Laravel)
+  ;; --------------------------------------------------------------
+  (add-to-list 'dape-configs
+	       `(php-local
+		 modes (php-mode php-ts-mode)
+		 port 9003
+		 :type "php"
+		 :request "launch"
+		 :name "PHP :: Listen for XDebug (Local)"
+		 :sourceMaps t))
 
-;; --- Python ---
-(use-package dap-python
-  :ensure nil
-  :after dap-mode
-  :hook (python-ts-mode . dap-python-setup)
-  :preface
-  (defun jmc-dap-python-get-executable ()
-    "Return the active venv Python path, falling back to system python3."
-    (let ((venv (getenv "VIRTUAL_ENV")))
-      (if (and venv (not (string-empty-p venv)))
-	  (expand-file-name "bin/python3" venv)
-	"python3")))
-  :config
-  (setq dap-python-executable (jmc-dap-python-get-executable))
+  (add-to-list 'dape-configs
+	       `(php-symfony-docker
+		 modes (php-mode php-ts-mode)
+		 port 9003
+		 :type "php"
+		 :request "launch"
+		 :name "PHP :: Symfony Docker (Skeleton)"
+		 :hostname "0.0.0.0"
+		 :pathMappings ,(lambda () `(:/app ,(jmc-get-workspace-root)))
+		 :sourceMaps t))
 
-  (dap-register-debug-template "Python :: Debug (Flask)"
-			       (list :type "python" :args "" :cwd nil
-				     :env '(("FLASK_APP" . "app:app") ("FLASK_ENV" . "development"))
-				     :module "flask" :name "Python :: Debug (Flask)"))
+  (add-to-list 'dape-configs
+	       `(php-laravel-sail
+		 modes (php-mode php-ts-mode)
+		 port 9003
+		 :type "php"
+		 :request "launch"
+		 :name "PHP :: Laravel Sail"
+		 :pathMappings ,(lambda () `(:/var/www/html ,(jmc-get-workspace-root)))
+		 :sourceMaps t))
 
-  (dap-register-debug-template "Python :: Debug (Django)"
-			       (list :type "python" :args "manage.py runserver" :cwd nil
-				     :name "Python :: Debug (Django)")))
+  ;; --------------------------------------------------------------
+  ;; PYTHON (Flask, Django)
+  ;; --------------------------------------------------------------
+  (add-to-list 'dape-configs
+	       `(python-flask
+		 modes (python-mode python-ts-mode)
+		 command jmc-python-venv-bin
+		 command-args ("-m" "debugpy.adapter")
+		 :type "python"
+		 :request "launch"
+		 :module "flask"
+		 :args ["run" "--no-debugger" "--no-reload"]
+		 :cwd jmc-get-workspace-root
+		 :env (:FLASK_APP "app.py" :FLASK_DEBUG "1" :PYTHONPATH ".")))
 
-;; --- Go ---
-(use-package dap-dlv-go
-  :ensure nil
-  :after dap-mode
-  :hook (go-ts-mode . dap-go-setup)
-  :config
-  (dap-register-debug-template "Go :: Debug (Current File)"
-			       (list :type "go" :name "Go :: Debug (Current File)" :mode "debug"
-				     :request "launch" :program "${file}")))
+  (add-to-list 'dape-configs
+	       `(python-django
+		 modes (python-mode python-ts-mode)
+		 command jmc-python-venv-bin
+		 command-args ("-m" "debugpy.adapter")
+		 :type "python"
+		 :request "launch"
+		 :program "manage.py"
+		 :args ["runserver" "--noreload"]
+		 :cwd jmc-get-workspace-root
+		 :django t))
 
-;; --- JS / Node ---
-(use-package dap-node
-  :ensure nil
-  :after dap-mode
-  :hook ((js-ts-mode typescript-ts-mode tsx-ts-mode) . dap-node-setup))
+  ;; --------------------------------------------------------------
+  ;; JAVASCRIPT & TYPESCRIPT (Node.js & Chrome)
+  ;; --------------------------------------------------------------
+  (add-to-list 'dape-configs
+	       `(js-node-file
+		 ,@(alist-get 'js-debug-node dape-configs)
+		 modes (js-ts-mode typescript-ts-mode tsx-ts-mode)
+		 :name "JS/TS :: Run Current File"
+		 :sourceMaps t))
 
-;; --- Rust (via CodeLLDB) ---
-(use-package dap-codelldb
-  :ensure nil
-  :after dap-mode
-  :config
-  (dap-register-debug-template "Rust :: Debug (CodeLLDB)"
-			       (list :type "lldb"  ; <--- THIS WAS THE CULPRIT. It must be "lldb"
-				     :name "Rust :: Debug (CodeLLDB)"
-				     :request "launch"
-				     :cargo (list :args '("build"))
-				     :program "${workspaceFolder}/target/debug/${workspaceFolderBasename}"
-				     :cwd "${workspaceFolder}")))
+  (add-to-list 'dape-configs
+	       `(js-tsx-file
+		 ,@(alist-get 'js-debug-node dape-configs)
+		 modes (typescript-ts-mode tsx-ts-mode)
+		 :name "JS/TS :: Run Raw TypeScript (tsx)"
+		 :type "pwa-node"
+		 :request "launch"
+		 :cwd jmc-get-workspace-root
+		 ;; Inject the tsx loader into the native Node process
+		 :runtimeExecutable "node"
+		 :runtimeArgs ["--import" "tsx"]
+		 :program ,(lambda () (buffer-file-name))
+		 :sourceMaps t
+		 :resolveSourceMapLocations ["${workspaceFolder}/**" "!**/node_modules/**"]))
 
-;; =============================================================================
-;; DAP UI WINDOW LAYOUT
-;; =============================================================================
+  (add-to-list 'dape-configs
+	       `(js-npm-script
+		 ,@(alist-get 'js-debug-node dape-configs)
+		 modes (js-ts-mode typescript-ts-mode tsx-ts-mode)
+		 :name "JS/TS :: NPM Run Script"
+		 :runtimeExecutable "npm"
+		 :runtimeArgs ["run" "dev"]
+		 :console "integratedTerminal"))
 
-(use-package dap-ui
-  :ensure nil
-  :after dap-mode
-  :custom
-  (dap-ui-buffer-configurations
-   `((,(regexp-quote "*dap-ui-locals*")      . ((side . right) (slot . 1) (window-width . 0.20)))
-     (,(regexp-quote "*dap-ui-expressions*") . ((side . right) (slot . 2) (window-width . 0.20)))
-     (,(regexp-quote "*dap-ui-breakpoints*") . ((side . left)  (slot . 2) (window-width . 0.20)))
-     (,(regexp-quote "*dap-ui-sessions*")    . ((side . left)  (slot . 3) (window-width . 0.20))))))
+  (add-to-list 'dape-configs
+	       `(js-chrome-frontend
+		 ,@(alist-get 'js-debug-chrome dape-configs)
+		 modes (js-ts-mode typescript-ts-mode tsx-ts-mode)
+		 :name "JS/TS :: Chrome Debugger"
+		 :url "http://localhost:3000"))
+
+  ;; --------------------------------------------------------------
+  ;; GO (Delve)
+  ;; --------------------------------------------------------------
+  (add-to-list 'dape-configs
+	       `(go-current-file
+		 ,@(alist-get 'dlv dape-configs)
+		 modes (go-mode go-ts-mode)
+		 :name "Go :: Debug (Current File)"
+		 :request "launch"
+		 :mode "debug"
+		 :program ,(lambda () (buffer-file-name))
+		 :cwd jmc-get-workspace-root))
+
+  (add-to-list 'dape-configs
+	       `(go-package
+		 ,@(alist-get 'dlv dape-configs)
+		 modes (go-mode go-ts-mode)
+		 :name "Go :: Debug (Current Package)"
+		 :request "launch"
+		 :mode "debug"
+		 :program ,(lambda () (file-name-directory (buffer-file-name)))
+		 :cwd jmc-get-workspace-root))
+
+  (add-to-list 'dape-configs
+	       `(go-test
+		 ,@(alist-get 'dlv dape-configs)
+		 modes (go-mode go-ts-mode)
+		 :name "Go :: Debug (Tests)"
+		 :request "launch"
+		 :mode "test"
+		 :program ,(lambda () (file-name-directory (buffer-file-name)))
+		 :cwd jmc-get-workspace-root))
+
+  ;; --------------------------------------------------------------
+  ;; RUST (CodeLLDB)
+  ;; --------------------------------------------------------------
+  (add-to-list 'dape-configs
+	       `(rust-codelldb
+		 modes (rustic-mode rust-ts-mode)
+		 ensure dape-ensure-command
+		 command "codelldb"
+		 command-args ("--port" :autoport)
+		 port :autoport
+		 :type "lldb"
+		 :request "launch"
+		 :cwd jmc-get-workspace-root
+		 compile "cargo build"
+		 ;; Dynamically build the path to the compiled binary based on the folder name
+		 :program ,(lambda ()
+			     (let ((root (jmc-get-workspace-root)))
+			       (concat root "target/debug/"
+				       (file-name-nondirectory
+					(directory-file-name root))))))))
 
 ;; =============================================================================
 ;; FINALIZE

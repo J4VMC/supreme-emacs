@@ -87,8 +87,7 @@
   :config
   ;; --- 1. Define Custom Formatters ---
   (setf (alist-get 'phpcs-psr12 apheleia-formatters)
-        '("phpcbf" "--standard=PSR12"
-          (concat "--stdin-path=" (or buffer-file-name "stdin"))))
+        '("sh" "-c" "phpcbf --standard=PSR12 --stdin-path=\"$1\" - || true" "--" filepath))
   (setf (alist-get 'google-java-format apheleia-formatters) '("google-java-format" "-"))
   (setf (alist-get 'goimports apheleia-formatters) '("goimports"))
   (setf (alist-get 'rustfmt apheleia-formatters) '("rustfmt" "--emit=stdout"))
@@ -129,6 +128,7 @@
   (setf (alist-get 'yaml-ts-mode apheleia-mode-alist) 'prettier-yaml)
   (setf (alist-get 'markdown-mode apheleia-mode-alist) 'prettier-markdown)
   (setf (alist-get 'gfm-mode apheleia-mode-alist) 'prettier-markdown)
+  (setf (alist-get 'svelte-mode apheleia-mode-alist) 'prettier-svelte)
 
   ;; --- 3. Enable Globally ---
   (apheleia-global-mode t))
@@ -144,14 +144,25 @@
               ("M-n" . flycheck-next-error)
               ("M-p" . flycheck-previous-error))
   :config
-  ;; --- Custom Checker Definitions ---
-  (flycheck-define-checker typescript-tsc-syntax
-    "A TypeScript syntax checker using tsc."
-    :command ("tsc" "--noEmit" "--allowJs" "--pretty" "false" source-inplace)
-    :error-patterns
-    ((error line-start (file-name) "(" line "," column "): error TS" (message) line-end))
-    :modes (typescript-ts-mode tsx-ts-mode js-ts-mode))
 
+  (defface lsp-flycheck-info-unnecessary
+    '((t :inherit shadow :strike-through -1))
+    "Face used to fade out unused imports/variables.")
+  
+  (defface lsp-flycheck-warning-unnecessary
+    '((t :inherit shadow :strike-through -1))
+    "Face used to fade out unused imports/variables.")
+  
+  (flycheck-define-error-level 'lsp-flycheck-info-unnecessary
+    :severity 0 :compilation-level 0 :overlay-category 'flycheck-info-overlay
+    :fringe-bitmap 'flycheck-fringe-bitmap-info :fringe-face 'flycheck-fringe-info
+    :error-list-face 'flycheck-error-list-info)
+
+  (flycheck-define-error-level 'lsp-flycheck-warning-unnecessary
+    :severity 1 :compilation-level 1 :overlay-category 'flycheck-warning-overlay
+    :fringe-bitmap 'flycheck-fringe-bitmap-warning :fringe-face 'flycheck-fringe-warning
+    :error-list-face 'flycheck-error-list-warning)
+  ;; --- Custom Checker Definitions ---
   (flycheck-define-checker sql-sqlint
     "A SQL syntax checker using sqlint."
     :command ("sqlint")
@@ -169,7 +180,6 @@
     :modes fish-mode)
 
   ;; --- Registering Checkers ---
-  (add-to-list 'flycheck-checkers 'typescript-tsc-syntax)
   (add-to-list 'flycheck-checkers 'fish)
   (add-to-list 'flycheck-checkers 'sql-sqlint)
   (add-to-list 'flycheck-checkers 'rustic-clippy)
@@ -192,9 +202,6 @@
    ;; SQL
    ((derived-mode-p 'sql-mode 'sql-ts-mode)
     (flycheck-add-next-checker 'lsp 'sql-sqlint))
-   ;; JS/TS
-   ((derived-mode-p 'typescript-ts-mode 'tsx-ts-mode 'js-ts-mode)
-    (flycheck-add-next-checker 'lsp 'typescript-tsc-syntax))
    ;; PHP
    ((derived-mode-p 'php-mode 'php-ts-mode)
     (flycheck-add-next-checker 'lsp 'phpstan)
