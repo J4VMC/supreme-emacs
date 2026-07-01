@@ -40,6 +40,19 @@
   ;; Tell Emacs to load the package the moment `ghostel` is called
   :commands (ghostel)
   :preface
+
+  ;; ===========================================================================
+  ;; CUSTOM PASTE LOGIC FOR CUA-MODE
+  ;; ===========================================================================
+  
+  (defun jmc-ghostel-paste ()
+    "Send the current clipboard/kill-ring text directly to the Ghostel process."
+    (interactive)
+    (let ((proc (get-buffer-process (current-buffer)))
+          (text (current-kill 0 t)))
+      (if proc
+          (process-send-string proc text)
+        (error "No active process found for this Ghostel buffer"))))
   
   ;; ===========================================================================
   ;; CUSTOM "FORCE KILL" LOGIC
@@ -111,12 +124,12 @@ With prefix ARG (C-u), create a new separate terminal buffer."
 
   :bind (:map ghostel-mode-map
               ;; Bind to standard mode
-              ("M-k" . jmc-ghostel-force-kill))
+              ("M-k" . jmc-ghostel-force-kill)
+	      ("C-v" . jmc-ghostel-paste)
+              ("C-y" . jmc-ghostel-paste))
   (:map ghostel-semi-char-mode-map
         ;; Bind to the active typing mode to prevent the shell from swallowing it
-        ("M-k" . jmc-ghostel-force-kill)
-        ;; Paste override
-        ("C-y" . yank))
+        ("M-k" . jmc-ghostel-force-kill))
   
   :config
   ;; --- Directory & File Integration ---

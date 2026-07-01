@@ -174,6 +174,7 @@
 (define-key jmc-jump-map (kbd "g") 'projectile-grep)             ; Search text in project.
 (define-key jmc-jump-map (kbd "c") 'projectile-compile-project)  ; Trigger build command.
 (define-key jmc-jump-map (kbd "r") 'projectile-run-vterm)        ; Launch terminal at root.
+(define-key jmc-jump-map (kbd "a") 'claude-code)                 ; Launch Claude at root.
 
 ;; 4. Treemacs Shortcuts (UI Controls)
 (defun jmc-find-top-git-root (dir)

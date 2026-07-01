@@ -284,6 +284,21 @@
   :defer t)
 
 ;; =============================================================================
+;; CLAUDE CODE (AI ASSISTANT)
+;; =============================================================================
+
+(use-package claude-code
+  :ensure (:host github :repo "stevemolitor/claude-code.el")
+  :defer t
+  :custom
+  (claude-code-terminal-backend 'ghostel)
+  :bind (("C-c c m" . claude-code-transient)
+         ("C-c c c" . claude-code)
+         ("C-c c r" . claude-code-send-region)
+         ("C-c c e" . claude-code-fix-error-at-point)
+         ("C-c c b" . claude-code-switch-to-buffer)))
+
+;; =============================================================================
 ;; FINALIZE
 ;; =============================================================================
 (provide 'dev)
