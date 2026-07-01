@@ -197,6 +197,15 @@
   (setq auto-save-file-name-transforms
         `((".*" ,(no-littering-expand-var-file-name "auto-save/") t))))
 
+;; Block until Elpaca finishes installing/activating `no-littering`.
+;; -> `no-littering` redirects `recentf-save-file`, `savehist-file`, etc. to
+;;    `var/` as a side effect of loading, but Elpaca installs `:ensure t`
+;;    packages asynchronously. Without this wait, later modules (e.g. `editor`)
+;;    can enable `recentf-mode`/`savehist-mode` before the redirect happens,
+;;    which makes them read/write the default (wrong) location and silently
+;;    lose history, since these modes refuse to re-initialize once enabled.
+(elpaca-wait)
+
 ;; =============================================================================
 ;; SHELL ENVIRONMENT
 ;; =============================================================================
@@ -272,8 +281,8 @@
 ;; 2. Load the modules in logical order.
 ;; -> Each module must end with a corresponding `(provide 'module-name)`.
 
-(require 'interface)   ; UI customizations (dashboard, mode-line)
 (require 'editor)      ; General editing (line numbers, matching parens)
+(require 'interface)   ; UI customizations (dashboard, mode-line)
 (require 'completion)  ; Completion frameworks (Vertico, Company)
 
 (require 'explorer)    ; File management tools (Dired tweaks)

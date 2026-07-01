@@ -69,7 +69,12 @@
   (setq projectile-enable-keymap nil)
 
   ;; Define the root directories where your code projects live.
-  (setq projectile-project-search-path '("~/Projects")
+  ;; -> Projects are nested a few levels deep (e.g.
+  ;;    "~/Projects/Software/SuperSecret/some-project"), so search each path
+  ;;    (DIRECTORY . DEPTH) levels down to where they actually live, instead
+  ;;    of relying on the default depth of 1, which would stop one level in,
+  ;;    at "~/Projects/Software".
+  (setq projectile-project-search-path '(("~/Projects" . 3))
         
         ;; PERFORMANCE: Use `rg` (ripgrep) for file indexing.
         ;; -> Significantly faster than the built-in Emacs `find` command.
@@ -79,10 +84,29 @@
         projectile-grep-command "rg -n --with-filename --no-heading --max-columns=150 --ignore-case --max-filesize 1M --glob !.git/"
         
         ;; Enable caching for even faster subsequent file lookups.
-        projectile-enable-caching t)
+        projectile-enable-caching t
+
+        ;; Automatically pick up new project directories under
+        ;; `projectile-project-search-path' instead of only remembering
+        ;; projects that have already been visited once.
+        projectile-auto-discover t)
   :config
+  ;; Recognize bare Go modules (no VCS) as projects too.
+  ;; -> `go.mod' is missing from Projectile's default marker list, so a Go
+  ;;    project without its own `.git' directory would otherwise be invisible
+  ;;    to project discovery.
+  (add-to-list 'projectile-project-root-files "go.mod")
+
   ;; Activate Projectile globally.
-  (projectile-mode 1))
+  (projectile-mode 1)
+
+  ;; Re-scan the search path now so newly created project directories are
+  ;; known immediately. `projectile-auto-discover' only triggers discovery
+  ;; from `projectile-known-projects' (used by interactive switch commands);
+  ;; the dashboard reads `projectile-known-projects-file' directly and never
+  ;; calls that wrapper, so without this call new projects wouldn't show up
+  ;; there until manually visited once.
+  (projectile-discover-projects-in-search-path))
 
 ;; =============================================================================
 ;; TREEMACS (THE VISUAL SIDEBAR)

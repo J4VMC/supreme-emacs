@@ -30,6 +30,8 @@
 (declare-function dashboard-setup-startup-hook "dashboard")
 (declare-function dashboard-open "dashboard")
 (declare-function dashboard-modify-heading-icons "dashboard")
+(declare-function dashboard-icon-for-dir "dashboard")
+(declare-function dashboard-icon-for-file "dashboard")
 (declare-function helpful-callable "helpful")
 (declare-function helpful-at-point "helpful")
 (declare-function helpful-function "helpful")
@@ -438,6 +440,48 @@
 (add-hook 'dashboard-mode-hook #'setup-dashboard-lock)
 
 (setq dashboard-projects-switch-function 'projectile-switch-project-by-name)
+
+;; -----------------------------------------------------------------------------
+;; Smarter Per-Project Icons
+;; -----------------------------------------------------------------------------
+;; By default, `all-the-icons-icon-for-dir' picks a project's icon by matching
+;; patterns against the DIRECTORY NAME (see `all-the-icons-dir-icon-alist'),
+;; not by looking at what's actually inside it. Any project whose name
+;; contains "test" (e.g. "rust-test", "php-test") matches the same generic
+;; "test-dir" rule and gets an identical icon regardless of language.
+;; -> Look for a well-known marker file instead, and borrow the (language-
+;;    aware) file icon for that marker so the icon actually reflects the
+;;    project's tech stack.
+
+(defvar jmc-dashboard-project-marker-files
+  '("Cargo.toml" "go.mod" "package.json" "composer.json" "Gemfile"
+    "pyproject.toml" "requirements.txt" "Pipfile" "setup.py"
+    "pom.xml" "build.gradle" "mix.exs" "Package.swift" "CMakeLists.txt")
+  "Marker files checked, in order, to guess a project's language for icons.")
+
+(defvar jmc-dashboard-project-marker-extensions
+  '("\\.rs\\'" "\\.go\\'" "\\.py\\'" "\\.rb\\'" "\\.php\\'" "\\.sql\\'")
+  "Fallback file-extension patterns for projects without a manifest file.
+Only the project's top-level directory is scanned, to avoid recursing into
+directories like `node_modules'.")
+
+(defun jmc-dashboard-icon-for-project (orig-fn dir &rest args)
+  "Prefer a language-specific icon for DIR based on marker files.
+Falls back to calling ORIG-FN (`dashboard-icon-for-dir') with DIR and ARGS
+when nothing recognizable is found."
+  (let* ((exact (and (file-directory-p dir)
+                     (seq-find (lambda (f) (file-exists-p (expand-file-name f dir)))
+                               jmc-dashboard-project-marker-files)))
+         (by-ext (and (not exact) (file-directory-p dir)
+                     (seq-find (lambda (re) (directory-files dir nil re t))
+                               jmc-dashboard-project-marker-extensions)))
+         (sample (and by-ext (car (directory-files dir nil by-ext t)))))
+    (cond
+     (exact (apply #'dashboard-icon-for-file exact args))
+     (sample (apply #'dashboard-icon-for-file sample args))
+     (t (apply orig-fn dir args)))))
+
+(advice-add 'dashboard-icon-for-dir :around #'jmc-dashboard-icon-for-project)
 
 ;; =============================================================================
 ;; MODE-LINE AND HELP SYSTEM
