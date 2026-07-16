@@ -1,13 +1,21 @@
-;;; lsp.el --- Language Server Protocol (LSP) Configuration -*- lexical-binding: t; -*-
+;;; lang-server.el --- Language Server Protocol (LSP) Configuration -*- lexical-binding: t; -*-
 
 ;;; Commentary:
 ;;
 ;; This file configures `lsp-mode`, the engine that turns Emacs into a
 ;; powerhouse IDE.
 ;;
+;; ### Why is this file NOT called lsp.el? ⚠️
+;; lsp-mode itself ships a library file named `lsp.el` (feature `lsp`).
+;; Because our `modules/` directory sits at the front of `load-path`, a
+;; module named `lsp.el` SHADOWS that library: any `(require 'lsp)` — from
+;; lsp-mode internals or third-party packages — could load this config file
+;; instead of the real library, depending on load-path ordering at that
+;; moment. Renaming the module removes the collision entirely.
+;;
 ;; ### What is LSP? 🧐
 ;; Language Server Protocol (LSP) is a standardized way for Emacs to talk to
-;; external "Language Servers" (like `pyright` for Python or `gopls` for Go).
+;; external "Language Servers" (like `basedpyright` for Python or `gopls` for Go).
 ;;
 ;; Think of the Server as the "brain": it does the heavy lifting of parsing
 ;; code, while Emacs acts as the "face": the UI where you see the results.
@@ -27,6 +35,7 @@
 (defvar lsp-use-plists)
 (defvar lsp-mode-map)
 (defvar lsp-ui-doc-enable)
+(defvar lsp-ui-doc-use-childframe)
 (defvar lsp-ui-doc-show-with-cursor)
 (defvar lsp-ui-doc-include-signature)
 (defvar lsp-ui-doc-position)
@@ -58,7 +67,6 @@
 
 (use-package lsp-mode
   :diminish "LSP"
-  :ensure t
   :defer t
   :hook (;; Enable visual error underlining (diagnostics) immediately.
          (lsp-mode . lsp-diagnostics-mode)
@@ -96,8 +104,14 @@
   (lsp-enable-xref t)               ; Required for "Go to Definition".
   (lsp-auto-configure t)            ; Let LSP attempt to set up servers automatically.
   (lsp-eldoc-enable-hover t)        ; Show function signatures in the bottom bar.
-  (lsp-enable-dap-auto-configure t) ; Bridge settings over to the debugger (`dap-mode`).
-  (lsp-enable-snippet nil)          ; No need for Yasnippet.
+
+  ;; DISABLED: this bridged LSP launch settings over to `dap-mode`, which we
+  ;; replaced with `dape` (see debugger.el). lsp-mode guards the feature with
+  ;; `(functionp 'dap-mode)` so leaving it on was a silent no-op, but nil
+  ;; documents the migration and skips the check.
+  (lsp-enable-dap-auto-configure nil)
+
+  (lsp-enable-snippet nil)          ; Snippets are routed through Tempel instead.
 
   ;; **PERFORMANCE**: Disable built-in file watching.
   ;; -> This can be a massive resource hog in large projects.
@@ -114,7 +128,6 @@
   ;; --- Visual UI Settings ---
 
   ;; Breadcrumbs: Show `Project > Folder > File > Function` at the top of the window.
-  ;; 
   (lsp-headerline-breadcrumb-enable t)
   (lsp-headerline-breadcrumb-enable-diagnostics nil)
   (lsp-headerline-breadcrumb-enable-symbol-numbers nil)
@@ -129,17 +142,17 @@
   ;; --- Documentation & Hover ---
 
   (lsp-signature-doc-lines 1)       ; Limit signature help to one line.
-  ;; Use "childframes": sleek, floating pop-up windows for documentation.
-  (lsp-ui-doc-use-childframe t)
   (lsp-eldoc-render-all nil)        ; Only show info for the specific symbol at point.
 
   ;; **PERFORMANCE**: Disable Code Lens & Semantic Tokens.
-  ;; -> We use Tree-sitter for high-speed syntax highlighting; LSP tokens are redundant.
+  ;; -> We use Tree-sitter for high-speed syntax highlighting; LSP tokens are
+  ;;    redundant. (dev.el re-enables lenses per-buffer for Scala only.)
   (lsp-lens-enable nil)
   (lsp-semantic-tokens-enable nil)
 
   :init
   ;; **CRITICAL PERFORMANCE**: Enable faster data parsing via plists.
+  ;; -> Pairs with the `LSP_USE_PLISTS` env var set in early-init.el.
   (setq lsp-use-plists t))
 
 ;; =============================================================================
@@ -169,34 +182,43 @@
 ;; =============================================================================
 
 ;; Completion "Glue": Connects LSP data to the `corfu` autocomplete UI.
+;; -> `:ensure nil` is REQUIRED: `lsp-completion` is a library INSIDE the
+;;    lsp-mode package, not a package of its own. With
+;;    `use-package-always-ensure` (init.el), omitting it makes Elpaca try to
+;;    install a nonexistent "lsp-completion" package on every startup.
 (use-package lsp-completion
+  :ensure nil
   :no-require
   :hook ((lsp-mode . lsp-completion-mode)))
 
 ;; LSP UI: Manages the "pretty" visual elements.
 (use-package lsp-ui
-  :ensure t
   :defer t
   :commands (lsp-ui-doc-show lsp-ui-doc-glance)
   :bind (:map lsp-mode-map
               ;; Map `C-c C-d` to "glance" at documentation in a floating window.
+              ;; NOTE: minor-mode maps outrank BOTH the global map and major
+              ;; mode maps, so in every LSP buffer this shadows the global
+              ;; `helpful-at-point` binding (interface.el) — intentional:
+              ;; in code, LSP hover docs beat elisp help.
               ("C-c C-d" . 'lsp-ui-doc-glance))
   :after (lsp-mode)
   :config
   (setq lsp-ui-doc-enable t)
+  ;; Use "childframes": sleek, floating pop-up windows for documentation.
+  ;; -> (Moved here from the lsp-mode block: it's an lsp-ui variable.)
+  (setq lsp-ui-doc-use-childframe t)
   (setq lsp-ui-doc-show-with-cursor nil) ; Don't show on every move; only on command.
   (setq lsp-ui-doc-include-signature t)
   (setq lsp-ui-doc-position 'at-point)) ; Pop up right at the cursor.
 
 ;; Consult-LSP: Integrate LSP search with our fuzzy-finding UI.
 (use-package consult-lsp
-  :ensure t
   :defer t
   :after (consult lsp-mode))
 
 ;; Treemacs-LSP: Show error icons and health status in the file sidebar.
 (use-package lsp-treemacs
-  :ensure t
   :defer t
   :after (lsp-mode treemacs))
 
@@ -206,7 +228,6 @@
 
 ;; --- Java (Eclipse JDTLS) ---
 (use-package lsp-java
-  :ensure t
   :defer t
   :after lsp-mode
   :hook (java-ts-mode . (lambda ()
@@ -214,7 +235,10 @@
                           (lsp-deferred))))
 
 ;; --- ESLint (JS/TS) ---
+;; -> `:ensure nil`: `lsp-eslint` ships inside lsp-mode (clients/lsp-eslint.el);
+;;    it is NOT a standalone package (same always-ensure trap as above).
 (use-package lsp-eslint
+  :ensure nil
   :defer t
   :after lsp-mode
   :custom
@@ -230,7 +254,6 @@
 
 ;; --- TailwindCSS ---
 (use-package lsp-tailwindcss
-  :ensure t
   :defer t
   :init (setq lsp-tailwindcss-add-on-mode t)
   :config
@@ -240,7 +263,6 @@
 
 ;; --- Scala (Metals) ---
 (use-package lsp-metals
-  :ensure t
   :defer t
   :hook (scala-ts-mode . (lambda ()
                            (require 'lsp-metals)
@@ -254,10 +276,10 @@
 
 ;; --- Python (Basedpyright) ---
 (use-package lsp-pyright
-  :ensure t
   :defer t
   ;; We use `basedpyright`, a more feature-rich community fork of Microsoft's Pyright.
-  :custom (lsp-pyright-langserver-command "basedpyright")
+  :custom
+  (lsp-pyright-langserver-command "basedpyright")
   (lsp-pyright-python-executable-cmd "python3")
   :hook (python-ts-mode . (lambda ()
                             (require 'lsp-pyright)
@@ -270,16 +292,22 @@
         (setq lsp-pyright-workspace-config
               `(:python.analysis.extraPaths [,project-root])))))
   :init
-  (add-hook 'python-mode-hook #'jmc-set-pyright-paths))
+  ;; Hook on `python-base-mode-hook`, which BOTH python-mode and
+  ;; python-ts-mode run. The old hook was on `python-mode-hook`, which
+  ;; python-ts-mode does NOT run — so the workspace paths were never set
+  ;; for the ts buffers our files actually open in.
+  (add-hook 'python-base-mode-hook #'jmc-set-pyright-paths))
 
 
 ;; --- Rust (rust-analyzer) ---
+;; -> `:ensure nil`: `lsp-rust` also ships inside lsp-mode (clients/lsp-rust.el).
+;; -> The old `rust-ts-mode` hook was removed: `.rs` files open in
+;;    `rustic-mode` (languages.el), so that hook never fired. lsp-mode loads
+;;    `lsp-rust` itself when a Rust buffer starts LSP, at which point the
+;;    `:config` below applies.
 (use-package lsp-rust
-  :after lsp-mode
+  :ensure nil
   :defer t
-  :hook (rust-ts-mode . (lambda ()
-                          (require 'lsp-rust)
-                          (lsp-deferred)))
   :config
   ;; Use `clippy` as the background checker for superior Rust linting.
   (setq lsp-rust-analyzer-cargo-watch-command "clippy"
@@ -293,18 +321,22 @@
 ;; =============================================================================
 
 ;; --- Go (gopls) ---
+;; -> The duplicate `go-ts-mode-hook` -> lsp-deferred was removed: languages.el
+;;    already installs that hook. Only the server settings live here.
 (with-eval-after-load 'lsp-mode
-  (add-hook 'go-ts-mode-hook #'lsp-deferred)
   (setq lsp-go-analyses '((nilness . t) (unusedwrite . t) (unusedparams . t))
         lsp-go-use-gofumpt t)) ; Use the stricter 'gofumpt' formatter.
 
 ;; --- SQL (sql-language-server) ---
+;; -> The `sql-ts-mode-hook` was removed: that mode does not exist (see
+;;    languages.el). LSP startup for SQL buffers is handled by dev.el via
+;;    `hack-local-variables-hook`, so `.dir-locals.el` database connections
+;;    are read BEFORE the server boots.
 (with-eval-after-load 'lsp-mode
-  (add-hook 'sql-ts-mode-hook #'lsp-deferred)
   (lsp-register-client
    (make-lsp-client
     :new-connection (lsp-stdio-connection '("sql-language-server" "up" "--method" "stdio"))
-    :major-modes '(sql-mode sql-ts-mode)
+    :major-modes '(sql-mode)
     :priority -1
     :server-id 'sql-ls)))
 
@@ -312,6 +344,6 @@
 ;; FINALIZE
 ;; =============================================================================
 
-(provide 'lsp)
+(provide 'lang-server)
 
-;;; lsp.el ends here
+;;; lang-server.el ends here

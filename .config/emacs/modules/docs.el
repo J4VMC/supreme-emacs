@@ -71,8 +71,7 @@
     (terraform-mode      . ("Terraform"))
     
     (sql-mode            . ("PostgreSQL" "SQL"))
-    (sql-ts-mode         . ("PostgreSQL" "SQL"))
-    
+
     (emacs-lisp-mode       . ("Emacs Lisp"))
     (lisp-interaction-mode . ("Emacs Lisp")))
   "Mapping of Emacs major modes to their relevant Dash docset names.")

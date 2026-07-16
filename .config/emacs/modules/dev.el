@@ -18,9 +18,6 @@
 (defvar flycheck-checkers)
 (defvar flycheck-phpcs-standard)
 
-(declare-function magit-insert-forge-pullreqs "forge")
-(declare-function magit-insert-forge-issues "forge")
-(declare-function magit-insert-forge-notifications "forge")
 (declare-function apheleia-global-mode "apheleia")
 (declare-function flycheck-add-next-checker "flycheck")
 (declare-function flycheck-mode "flycheck")
@@ -43,10 +40,22 @@
   :ensure t
   :bind (:map magit-mode-map ("@" . forge-dispatch))
   :config
-  (setq auth-sources '("~/.authinfo.gpg"))
-  (add-hook 'magit-status-sections-hook #'magit-insert-forge-pullreqs nil t)
-  (add-hook 'magit-status-sections-hook #'magit-insert-forge-issues nil t)
-  (add-hook 'magit-status-sections-hook #'magit-insert-forge-notifications nil t))
+  (setq auth-sources '("~/.authinfo.gpg")))
+  ;; NOTE: no section hooks needed here. Forge adds its pullreq/issue
+  ;; sections to `magit-status-sections-hook' itself when it loads
+  ;; (`forge-add-default-sections', on by default). The old add-hook calls
+  ;; referenced functions that don't exist in forge
+  ;; (`magit-insert-forge-*' — the real names are `forge-insert-*') and
+  ;; passed `t' as add-hook's LOCAL flag, which registered them
+  ;; buffer-locally in whatever buffer was current at load time — dead
+  ;; code either way.
+
+;; Surface TODO/FIXME/NOTE keywords (the same ones hl-todo highlights)
+;; as a section in the magit status buffer. Scans with ripgrep.
+(use-package magit-todos
+  :after magit
+  :config
+  (magit-todos-mode 1))
 
 ;; =============================================================================
 ;; API TESTING (RESTCLIENT)
@@ -108,8 +117,8 @@
   (setf (alist-get 'go-ts-mode apheleia-mode-alist) 'goimports)
   (setf (alist-get 'rust-ts-mode apheleia-mode-alist) 'rustfmt)
   (setf (alist-get 'scala-ts-mode apheleia-mode-alist) 'scalafmt)
+  ;; (No sql-ts-mode entry: that mode does not exist — see languages.el.)
   (setf (alist-get 'sql-mode apheleia-mode-alist) 'sql-formatter)
-  (setf (alist-get 'sql-ts-mode apheleia-mode-alist) 'sql-formatter)
 
   ;; Web Technologies (Prettier)
   (setf (alist-get 'typescript-ts-mode apheleia-mode-alist) 'prettier-typescript)
@@ -139,6 +148,11 @@
 
 (use-package flycheck
   :ensure t
+  ;; This prog-mode hook is the SINGLE source of truth for enabling
+  ;; flycheck: every programming mode in languages.el derives from
+  ;; prog-mode, so the per-language `flycheck-mode' hook entries that used
+  ;; to be sprinkled there were redundant and have been removed. Only
+  ;; markdown-mode (a text-mode derivative) keeps its own hook.
   :hook (prog-mode . flycheck-mode)
   :bind (:map flycheck-mode-map
               ("M-n" . flycheck-next-error)
@@ -170,7 +184,7 @@
     :error-patterns
     ((error line-start "stdin:" line ":" column ":ERROR " (message) line-end)
      (warning line-start "stdin:" line ":" column ":WARNING " (message) line-end))
-    :modes (sql-mode sql-ts-mode))
+    :modes (sql-mode))
   
   (flycheck-define-checker fish
     "A Fish shell syntax checker using `fish -n`."
@@ -186,6 +200,15 @@
 
   (setq flycheck-phpcs-standard "PSR12"))
 
+;; Consult-Flycheck: a searchable, previewable list of the buffer's errors
+;; in the same Vertico UI as everything else — complements the one-at-a-time
+;; `M-n'/`M-p' navigation above. `M-s e' fits the `M-s' search prefix
+;; (`M-s r' ripgrep, `M-s l' line, `M-s d' docs).
+(use-package consult-flycheck
+  :after (consult flycheck)
+  :bind (:map flycheck-mode-map
+              ("M-s e" . consult-flycheck)))
+
 ;; =============================================================================
 ;; FLYCHECK "CHAINING" (THE RELAY RACE)
 ;; =============================================================================
@@ -200,7 +223,7 @@
    ((derived-mode-p 'go-mode 'go-ts-mode)
     (flycheck-add-next-checker 'lsp 'golangci-lint))
    ;; SQL
-   ((derived-mode-p 'sql-mode 'sql-ts-mode)
+   ((derived-mode-p 'sql-mode)
     (flycheck-add-next-checker 'lsp 'sql-sqlint))
    ;; PHP
    ((derived-mode-p 'php-mode 'php-ts-mode)
@@ -208,10 +231,9 @@
     (flycheck-add-next-checker 'phpstan 'php-phpcs))
    ;; Rust
    ((derived-mode-p 'rustic-mode 'rust-ts-mode 'rust-mode)
-    (flycheck-add-next-checker 'lsp 'rustic-clippy))
-   ;; Scala (Ensure Flycheck displays the LSP errors)
-   ((derived-mode-p 'scala-ts-mode)
-    (flycheck-mode 1))))
+    (flycheck-add-next-checker 'lsp 'rustic-clippy))))
+   ;; (The old Scala branch only called (flycheck-mode 1) — redundant:
+   ;;  the prog-mode hook above already enables flycheck everywhere.)
 
 (add-hook 'lsp-mode-hook #'jmc-configure-flycheck-chains)
 
@@ -224,8 +246,9 @@
   :ensure t
   :defer t
   :after flycheck
-  :hook ((go-mode . flycheck-golangci-lint-setup)
-         (go-ts-mode . flycheck-golangci-lint-setup)))
+  ;; Only go-ts-mode: `.go' files map there (languages.el); the go-mode
+  ;; package is no longer installed.
+  :hook (go-ts-mode . flycheck-golangci-lint-setup))
 
 ;; --- PHP ---
 (use-package flycheck-phpstan
@@ -237,8 +260,9 @@
   (setq-local indent-tabs-mode nil)
   (setq-local tab-width 4)
   (setq-local c-basic-offset 4)
-  (require 'flycheck-phpstan)
-  (flycheck-mode 1))
+  ;; Load the phpstan checker so the LSP -> phpstan -> phpcs chain works.
+  ;; (flycheck-mode itself comes from the global prog-mode hook.)
+  (require 'flycheck-phpstan))
 
 (add-hook 'php-ts-mode-hook #'jmc-php-setup-h)
 
@@ -257,7 +281,7 @@
 ;; BEFORE it attempts to boot up the `sqls` server.
 (add-hook 'hack-local-variables-hook
           (lambda ()
-            (when (derived-mode-p 'sql-mode 'sql-ts-mode)
+            (when (derived-mode-p 'sql-mode)
               (lsp-deferred))))
 
 ;; --- Scala ---
@@ -282,21 +306,6 @@
 (use-package package-lint
   :ensure t
   :defer t)
-
-;; =============================================================================
-;; CLAUDE CODE (AI ASSISTANT)
-;; =============================================================================
-
-(use-package claude-code
-  :ensure (:host github :repo "stevemolitor/claude-code.el")
-  :defer t
-  :custom
-  (claude-code-terminal-backend 'ghostel)
-  :bind (("C-c c m" . claude-code-transient)
-         ("C-c c c" . claude-code)
-         ("C-c c r" . claude-code-send-region)
-         ("C-c c e" . claude-code-fix-error-at-point)
-         ("C-c c b" . claude-code-switch-to-buffer)))
 
 ;; =============================================================================
 ;; FINALIZE

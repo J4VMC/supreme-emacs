@@ -6,8 +6,6 @@
 ;; "Completion" is Emacs's term for autocompletion, fuzzy finding, and
 ;; narrowing down lists of options.
 ;;
-;; ;; 
-;;
 ;; The configuration is broken into two distinct ecosystems:
 ;;
 ;; 1. MINIBUFFER COMPLETION (The "Vertico Stack"):
@@ -43,15 +41,13 @@
 (declare-function marginalia-mode "marginalia")
 (declare-function embark-prefix-help-command "embark")
 (declare-function global-corfu-mode "corfu")
+(declare-function corfu-popupinfo-mode "corfu-popupinfo")
+(declare-function corfu-indexed-mode "corfu-indexed")
 (declare-function corfu-terminal-mode "corfu-terminal")
-(declare-function cape-file "cape")
-(declare-function cape-dabbrev "cape")
-(declare-function cape-elisp-block "cape")
-(declare-function cape-keyword "cape")
-(declare-function cape-dict "cape")
-(declare-function cape-wrap-super "cape")
+(declare-function cape-capf-super "cape")
 (declare-function tempel-expand "tempel")
 (declare-function global-tempel-abbrev-mode "tempel")
+(declare-function lsp-snippet-tempel-lsp-mode-init "lsp-snippet-tempel")
 
 ;; =============================================================================
 ;; CORE EMACS COMPLETION BEHAVIOR
@@ -84,15 +80,10 @@
 ;; Vertico: The core User Interface for the minibuffer.
 ;; -> Replaces the default, clunky grid with a clean, fast, vertical list.
 (use-package vertico
-  :ensure t
   :diminish vertico-mode
   :init
   (vertico-mode) ; Enable the vertical UI globally.
   (vertico-multiform-mode)
-  :bind (:map vertico-map
-              ("RET" . vertico-directory-enter)
-              ("DEL" . vertico-directory-delete-char)
-              ("M-DEL" . vertico-directory-delete-word))
   :custom
   ;; Allow navigation to wrap around. Pressing 'down' at the bottom of the
   ;; list takes you back to the top, and vice-versa.
@@ -104,10 +95,17 @@
      (symbol (vertico-sort-function . vertico-sort-alpha)))))
 
 ;; Vertico Directory: Improves file path navigation inside the minibuffer.
+;; -> All three directory-command bindings live HERE now; the previous split
+;;    (RET/DEL/M-DEL in the vertico block, M-DEL again here) bound the same
+;;    key twice across two blocks.
 (use-package vertico-directory
-  :ensure nil ; Built-in with Vertico, so no need to download.
+  :ensure nil ; Ships inside the Vertico package, so no need to download.
   :after vertico
   :bind (:map vertico-map
+              ;; `RET` enters a directory instead of finishing with it.
+              ("RET" . vertico-directory-enter)
+              ;; `DEL` deletes a character, or a whole directory at a boundary.
+              ("DEL" . vertico-directory-delete-char)
               ;; In `C-x C-f` (find-file), `M-DEL` (Alt-Backspace) deletes
               ;; exactly one directory level (e.g., "foo/bar/" becomes "foo/").
               ("M-DEL" . vertico-directory-delete-word)))
@@ -115,13 +113,12 @@
 ;; Orderless: The "brains" behind the search filtering.
 ;; -> Lets you type search terms in *any order*, separated by spaces.
 (use-package orderless
-  :ensure t
   :init
   ;; --- Completion Style Priority ---
   ;; 1. basic: Try strict prefix matching first (typing 'i' matches 'init.el').
   ;; 2. orderless: If no prefix match exists, search anywhere in any order.
   (setq completion-styles '(basic orderless))
-  
+
   ;; Clear default completion categories to ensure our styles take precedence.
   (setq completion-category-defaults nil)
 
@@ -136,7 +133,6 @@
 ;; -> `find-file` shows file permissions and sizes.
 ;; -> `describe-function` shows the function's documentation string.
 (use-package marginalia
-  :ensure t
   :diminish marginalia-mode
   :after vertico
   :init (marginalia-mode))
@@ -144,7 +140,6 @@
 ;; Consult: Provides supercharged versions of built-in Emacs search commands.
 ;; -> All of these seamlessly use the Vertico/Orderless UI setup above.
 (use-package consult
-  :ensure t
   :after vertico
   :bind (;; `C-x b`: A vastly improved buffer switcher with previews.
          ("C-x b" . consult-buffer)
@@ -152,6 +147,11 @@
          ("M-y" . consult-yank-pop)
          ;; `M-s r`: Blazing fast project-wide search using `ripgrep` (rg).
          ("M-s r" . consult-ripgrep)
+         ;; `C-s`: THE in-buffer search (replaces the removed ctrlf).
+         ;; -> Same Vertico/Orderless/preview experience as every other
+         ;;    consult command. `C-r' remains stock isearch-backward as an
+         ;;    escape hatch (works in keyboard macros, occurrence-granular).
+         ("C-s" . consult-line)
          ;; `M-s l`: Fuzzy-search for a specific line *in the current buffer*.
          ("M-s l" . consult-line)
          ;; `M-s L`: Fuzzy-search for a specific line *across all open buffers*.
@@ -160,26 +160,38 @@
          ("M-s o" . consult-outline))
   :config
   ;; Arguments passed to `ripgrep` under the hood.
-  ;; -> Configured for smart casing, hidden files, and ignoring `.git/` folders.
+  ;; -> Consult's default flags, plus: hidden files, ignore `.git/`, and
+  ;;    size/column limits so giant vendored files can't wedge the search.
+  ;; -> Three past mistakes, kept out on purpose:
+  ;;    * NO trailing "." — consult appends its own search paths after the
+  ;;      pattern; a literal "." in the args made rg ALSO search the current
+  ;;      directory, duplicating results whenever explicit paths were given.
+  ;;    * NO `--ignore-case` — rg let the later `--smart-case` win, but
+  ;;      consult's highlighter keys off the flag's mere presence and
+  ;;      highlighted case-insensitively, mismatching the actual matches.
+  ;;    * KEEP `--with-filename` (a default we'd dropped) — rg omits
+  ;;      filenames when handed a single file, which broke consult's
+  ;;      output parsing.
   (setq consult-ripgrep-args
-        "rg --null --line-buffered --max-columns=150 --max-columns-preview --max-filesize 1M --ignore-case --path-separator /\\ --smart-case --no-heading --line-number --hidden --glob !.git/ .")
+        "rg --null --line-buffered --color=never --max-columns=150 --max-columns-preview --max-filesize 1M --path-separator /\\ --smart-case --no-heading --with-filename --line-number --search-zip --hidden --glob !.git/")
   ;; Press `/` during a Consult search to narrow results by category.
   (setq consult-narrow-key "/")
-  ;; -> Use the current region/symbol as the initial search term
+  ;; In a narrowed buffer, show line numbers relative to the WHOLE file,
+  ;; not the narrowed region. (The old comment here claimed this seeds the
+  ;; search with the symbol at point — it never did. That feature exists
+  ;; out of the box: press `M-n' inside `consult-line' to insert the
+  ;; symbol under the cursor as the search term.)
   (setq consult-line-numbers-widen t))
 
-;; Consult-Projectile integration.
-;; -> Makes Consult respect Projectile's concept of what a "project" is.
-(use-package consult-projectile
-  :after (consult projectile)
-  :ensure t)
+;; NOTE: the `consult-projectile' package was REMOVED — it was installed
+;; but never bound or called anywhere; the `s-p' jump map (projects.el)
+;; uses plain projectile commands directly.
 
 ;; Embark: The "Actions" framework.
 ;; -> Acts like a powerful right-click menu for the minibuffer.
 ;; -> Once you find a candidate (a file, a buffer, a package), press `C-.`
 ;;    to see a list of actions you can perform on it (delete, rename, copy, etc.).
 (use-package embark
-  :ensure t
   :bind (;; `C-.`: Open the Embark action menu for the currently highlighted item.
          ("C-." . embark-act)
          ;; `C-;`: Execute the most obvious/default action immediately (Do What I Mean).
@@ -199,7 +211,6 @@
 ;; Embark-Consult integration.
 ;; -> Connects Embark's export functions with Consult's live-preview features.
 (use-package embark-consult
-  :ensure t
   :after (embark consult)
   :hook
   ;; Enable live previews as you move your cursor through an Embark Collect buffer.
@@ -212,7 +223,6 @@
 ;; Corfu: The core UI for in-buffer code completion.
 ;; -> A clean, fast, and minimal pop-up that appears directly next to your cursor.
 (use-package corfu
-  :ensure t
   :diminish corfu-mode
   :init
   (global-corfu-mode) ; Enable autocomplete globally.
@@ -220,7 +230,6 @@
   (corfu-cycle t) ; Allow navigation to wrap from bottom to top.
   (corfu-auto t)  ; Trigger the pop-up automatically as you type (no need to hit TAB).
   (corfu-preselect 'first) ; -> Always preselect the first candidate
-  (corfu-indexed-mode t) ; -> Type M-1 to select the 1st candidate, M-2 for the 2nd, etc.
   :bind (:map corfu-map
               ;; Map TAB and Shift-TAB to navigate up and down the pop-up list.
               ;; -> This is the most standard and ergonomic setup for developers.
@@ -229,51 +238,88 @@
               ("S-TAB" . corfu-previous)
               ([backtab] . corfu-previous)))
 
-;; Corfu Popupinfo: Displays documentation alongside the autocomplete pop-up.
-(use-package corfu-popupinfo
+;; Corfu Indexed: Prefixes candidates with numbers for instant selection.
+;; -> Select a candidate by its number as a prefix argument, e.g. `M-2 RET`.
+;; -> FIXED: this used to be `(corfu-indexed-mode t)` inside corfu's
+;;    `:custom`, but corfu-indexed is a SEPARATE extension file that nothing
+;;    ever loaded — the variable was set on a void mode and indices never
+;;    appeared. It is a `:global t` mode, enabled once here.
+(use-package corfu-indexed
+  :ensure nil ; Ships inside the Corfu package.
   :after corfu
-  :ensure nil ; Built-in with Corfu.
-  :hook (corfu-mode . corfu-popupinfo-mode)
+  :config
+  (corfu-indexed-mode 1))
+
+;; Corfu Popupinfo: Displays documentation alongside the autocomplete pop-up.
+;; -> FIXED: this is a `:global t` minor mode (verified upstream). The old
+;;    `:hook (corfu-mode . corfu-popupinfo-mode)` re-toggled the GLOBAL mode
+;;    every time any buffer enabled corfu — enable it exactly once instead.
+(use-package corfu-popupinfo
+  :ensure nil ; Ships inside the Corfu package.
+  :after corfu
   :custom
   ;; Wait 0.25 seconds before showing the documentation pane to avoid flickering.
   (corfu-popupinfo-delay '(0.25 . 0.1))
   ;; Keep the documentation pane visible until you move away.
   (corfu-popupinfo-hide nil)
   :config
-  (corfu-popupinfo-mode))
+  (corfu-popupinfo-mode 1))
 
-;; Corfu Terminal: Ensures the UI still works if you run Emacs in the terminal (`emacs -nw`).
+;; Corfu Terminal: Corfu's childframe popup only exists on graphical frames;
+;; this package renders it as an overlay on text frames (`emacs -nw`,
+;; `emacsclient -t`).
+;; -> Loaded UNCONDITIONALLY. The old `:if (not (display-graphic-p))` was
+;;    evaluated once at startup: in a GUI session it never loaded (so
+;;    terminal client frames got no completion popup at all), and under a
+;;    daemon it always loaded. corfu-terminal decides per popup instead —
+;;    with `corfu-terminal-disable-on-gui' (default t), GUI frames keep the
+;;    childframe and only text frames use the overlay fallback.
 (use-package corfu-terminal
-  :if (not (display-graphic-p)) ; Only load if running in a CLI environment.
-  :ensure t
+  :after corfu
   :config
-  (corfu-terminal-mode))
+  (corfu-terminal-mode 1))
 
 ;; Cape: The "Backends" (Data Sources) for Corfu.
 ;; -> Corfu provides the visual pop-up, but Cape feeds it the actual data.
+;;
+;; ### Why a "super" backend?
+;; `completion-at-point-functions` is EXCLUSIVE: the first backend that
+;; returns candidates silences all the ones after it. Registering dabbrev,
+;; dict, and keyword as separate entries means you'd only ever see ONE of
+;; them at a time. `cape-capf-super` merges them into a single backend so
+;; all three contribute candidates to the SAME popup.
+;;
+;; ### The fix
+;; The old code built the super backend but "activated" it with a
+;; `setq-local` inside `:config` — which ran ONCE, in whatever buffer
+;; happened to be current during startup, and did nothing anywhere else.
+;; It is now added buffer-locally via mode hooks, at low priority (90) so
+;; smarter backends (LSP, Tempel, elisp) always get first refusal.
 (use-package cape
-  :ensure t
   :preface
-  ;; Group several backends together into a single "super" backend.
-  ;; -> This allows Corfu to suggest keywords, dictionary words, and buffer words simultaneously.
-  (defun super-capf-cape ()
-    (cape-wrap-super #'cape-dabbrev #'cape-dict #'cape-keyword))
+  (defun jmc-cape-setup-super-capf-h ()
+    "Add the merged dabbrev+dict+keyword Cape backend to this buffer."
+    ;; `cape-capf-super' is autoloaded, so calling it here pulls Cape in
+    ;; on first use without any eager loading at startup.
+    (add-hook 'completion-at-point-functions
+              (cape-capf-super #'cape-dabbrev #'cape-dict #'cape-keyword)
+              90 'local))
   :init
-  ;; `completion-at-point-functions` (capf) is the master list Emacs uses
-  ;; to figure out what to suggest. We append Cape's specialized engines here.
+  ;; --- Global fallbacks (useful in every buffer) ---
   (add-hook 'completion-at-point-functions #'cape-file)        ; File paths
-  (add-hook 'completion-at-point-functions #'cape-dabbrev)     ; Words from open buffers
-  (add-hook 'completion-at-point-functions #'cape-elisp-block) ; Emacs Lisp blocks
-  (add-hook 'completion-at-point-functions #'cape-keyword)     ; Programming language keywords
-  (add-hook 'completion-at-point-functions #'cape-dict)        ; Dictionary words
-  :config
-  ;; Apply the super backend to the local buffer.
-  (setq-local completion-at-point-functions (list #'super-capf-cape)))
+  (add-hook 'completion-at-point-functions #'cape-elisp-block) ; Elisp in org/markdown blocks
+
+  ;; --- The "wordy" sources, merged, per buffer ---
+  ;; (The old separate global hooks for dabbrev/dict/keyword were removed:
+  ;;  the super backend supersedes them, and as separate exclusive entries
+  ;;  dabbrev would have starved dict and keyword anyway.)
+  (add-hook 'prog-mode-hook #'jmc-cape-setup-super-capf-h)
+  (add-hook 'text-mode-hook #'jmc-cape-setup-super-capf-h)
+  (add-hook 'conf-mode-hook #'jmc-cape-setup-super-capf-h))
 
 ;; Tempel: The Snippet Engine.
 ;; -> Expands short trigger words (e.g., "for") into full code blocks.
 (use-package tempel
-  :ensure t
   :custom
   ;; Define the location of your custom, handwritten snippet files.
   (tempel-path (locate-user-emacs-file "templates"))
@@ -294,18 +340,6 @@
     ;; Adds Tempel snippets directly into the Corfu autocomplete pop-up.
     ;; -> You will see snippet suggestions mixed in with standard code completion.
     (add-hook 'completion-at-point-functions #'tempel-expand -1 'local))
-
-  ;; LSP Snippet Tempel: Bridges LSP server snippets and Tempel.
-  ;; -> Language servers (via Eglot or lsp-mode) often provide advanced, context-aware snippets.
-  ;; -> This package intercepts those snippets and feeds them into Tempel,
-  ;;    allowing you to expand them seamlessly as if they were local Tempel snippets.
-  (use-package lsp-snippet-tempel
-    :ensure (:host github :repo "svaante/lsp-snippet")
-    :config
-    ;; Conditionally enable the integration based on which LSP client you use.
-    (when (featurep 'lsp-mode)
-      ;; -> Route `lsp-mode` snippets into Tempel.
-      (lsp-snippet-tempel-lsp-mode-init)))
 
   ;; --- Conventional Commits Integration ---
   (defun jmc-magit-commit-conventional-h ()
@@ -335,10 +369,26 @@
   ;; Automatically expand a snippet if you type its trigger word followed by SPACE.
   (global-tempel-abbrev-mode 1))
 
+;; LSP Snippet Tempel: Bridges LSP server snippets and Tempel.
+;; -> Language servers often provide advanced, context-aware snippets. This
+;;    package intercepts those snippets and feeds them into Tempel, allowing
+;;    you to expand them as if they were local Tempel snippets.
+;; -> FIXED (twice): (1) promoted from a use-package NESTED inside tempel's
+;;    `:preface` to a normal top-level block. (2) The old guard
+;;    `(when (featurep 'lsp-mode) ...)` was evaluated at startup — when
+;;    lsp-mode is ALWAYS still deferred — so the bridge was never
+;;    initialized and LSP snippets never reached Tempel.
+;;    `with-eval-after-load` runs it whenever lsp-mode actually loads.
+(use-package lsp-snippet-tempel
+  :ensure (:host github :repo "svaante/lsp-snippet")
+  :after tempel
+  :config
+  (with-eval-after-load 'lsp-mode
+    (lsp-snippet-tempel-lsp-mode-init)))
+
 ;; Tempel Collection: A pre-made library of community snippets.
 ;; -> Provides boilerplate snippets for Python, JS, Go, C++, etc., out of the box.
 (use-package tempel-collection
-  :ensure t
   :after tempel)
 
 ;; =============================================================================

@@ -26,6 +26,7 @@
 ;; =============================================================================
 
 (defvar projectile-enable-keymap)
+(defvar projectile-switch-project-action)
 (defvar projectile-project-search-path)
 (defvar projectile-generic-command)
 (defvar projectile-grep-command)
@@ -45,8 +46,11 @@
 (defvar treemacs-position)
 (defvar treemacs-show-hidden-files)
 (defvar treemacs-workspace-switch-cleanup)
+(defvar treemacs-create-file-functions)
 (defvar jmc-jump-map)
+(defvar projectile-known-projects)
 
+(declare-function dashboard-refresh-buffer "dashboard")
 (declare-function projectile-mode "projectile")
 (declare-function projectile-project-root "projectile")
 (declare-function treemacs-follow-mode "treemacs")
@@ -57,13 +61,13 @@
 (declare-function treemacs-get-local-window "treemacs")
 (declare-function treemacs-add-and-display-current-project-exclusively "treemacs")
 (declare-function treemacs-goto-file-node "treemacs")
+(declare-function jmc-ghostel-toggle "terminal")
 
 ;; =============================================================================
 ;; PROJECTILE (THE LOGIC ENGINE)
 ;; =============================================================================
 
 (use-package projectile
-  :ensure t
   :init
   ;; Disable Projectile's default "C-c p" keymap so we can use our custom setup.
   (setq projectile-enable-keymap nil)
@@ -75,14 +79,14 @@
   ;;    of relying on the default depth of 1, which would stop one level in,
   ;;    at "~/Projects/Software".
   (setq projectile-project-search-path '(("~/Projects" . 3))
-        
+
         ;; PERFORMANCE: Use `rg` (ripgrep) for file indexing.
         ;; -> Significantly faster than the built-in Emacs `find` command.
         projectile-generic-command "rg -0 --files --color=never --hidden --glob !.git/ --max-filesize 1M"
-        
+
         ;; PERFORMANCE: Use `rg` for project-wide searching (grep).
         projectile-grep-command "rg -n --with-filename --no-heading --max-columns=150 --ignore-case --max-filesize 1M --glob !.git/"
-        
+
         ;; Enable caching for even faster subsequent file lookups.
         projectile-enable-caching t
 
@@ -97,55 +101,106 @@
   ;;    to project discovery.
   (add-to-list 'projectile-project-root-files "go.mod")
 
+  ;; Recognize any directory with a direnv `.envrc' as a project root.
+  ;; -> NOTE: this list is consulted by projectile's TOP-DOWN search, which
+  ;;    runs AFTER the bottom-up VCS search — so inside a git repo, the git
+  ;;    root still wins (usually what you want). If you ever need `.envrc'
+  ;;    to define sub-project roots INSIDE a monorepo, add it to
+  ;;    `projectile-project-root-files-bottom-up' instead.
+  (add-to-list 'projectile-project-root-files ".envrc")
+
   ;; Activate Projectile globally.
   (projectile-mode 1)
 
-  ;; Re-scan the search path now so newly created project directories are
-  ;; known immediately. `projectile-auto-discover' only triggers discovery
-  ;; from `projectile-known-projects' (used by interactive switch commands);
-  ;; the dashboard reads `projectile-known-projects-file' directly and never
-  ;; calls that wrapper, so without this call new projects wouldn't show up
-  ;; there until manually visited once.
-  (projectile-discover-projects-in-search-path))
+  ;; Re-scan the search path so newly created project directories are known
+  ;; without having been visited once. `projectile-auto-discover' only
+  ;; triggers discovery from interactive switch commands, and the dashboard
+  ;; reads `projectile-known-projects-file' directly, so an explicit scan is
+  ;; still needed.
+  ;; -> DEFERRED to idle time: the scan walks ~/Projects three levels deep,
+  ;;    which was pure startup latency when run synchronously here. If the
+  ;;    scan finds new projects while you are still looking at the
+  ;;    dashboard, the dashboard is refreshed in place; otherwise the new
+  ;;    entries simply show up in `s-p p' and on the next launch.
+  (run-with-idle-timer
+   1 nil
+   (lambda ()
+     (let ((before (length projectile-known-projects)))
+       (projectile-discover-projects-in-search-path)
+       (when (and (> (length projectile-known-projects) before)
+                  (fboundp 'dashboard-refresh-buffer)
+                  (eq (window-buffer (selected-window))
+                      (get-buffer "*dashboard*")))
+         (dashboard-refresh-buffer))))))
 
 ;; =============================================================================
 ;; TREEMACS (THE VISUAL SIDEBAR)
 ;; =============================================================================
 
 (use-package treemacs
-  :ensure t
   :bind
   (("s-0" . treemacs-select-window)       ; Move cursor focus to the sidebar.
    ("C-c t d" . treemacs-select-directory)) ; Manually add a folder to the sidebar.
   :config
   ;; UX: Enable single-click to expand or collapse folders (default is double-click).
-  (with-eval-after-load 'treemacs
-    (define-key treemacs-mode-map [mouse-1] 'treemacs-single-click-expand-action))
+  (define-key treemacs-mode-map [mouse-1] 'treemacs-single-click-expand-action)
+
+  ;; UX: HAND pointer over clickable nodes, ARROW everywhere else — like
+  ;; any other tree UI. Built on the text-property lookup chain, which is
+  ;; overlays > character's own props > CATEGORY symbol > buffer DEFAULTS:
+  ;; -> Treemacs propertizes every clickable node (file, dir, project —
+  ;;    all node types) with `category: treemacs-button`, and category
+  ;;    indirection makes properties of that SYMBOL apply to all of them.
+  ;;    One `put' = hand cursor on every clickable, present and future.
+  ;; -> `default-text-properties' (buffer-local, so scoped to the sidebar)
+  ;;    is the bottom of the chain: anything WITHOUT a more specific
+  ;;    pointer — indentation, annotations, gaps — falls through to arrow.
+  ;;    Space past end-of-line is already an arrow (`void-text-area-pointer').
+  ;; -> NOTE: do NOT reintroduce a buffer-spanning `pointer' overlay here;
+  ;;    overlays outrank text properties and would mask the hand.
+  (put 'treemacs-button 'pointer 'hand)
+  (defun jmc-treemacs-pointer-defaults-h ()
+    "Make the arrow pointer the default over non-clickable sidebar text."
+    (setq-local default-text-properties '(pointer arrow)))
+  (add-hook 'treemacs-mode-hook #'jmc-treemacs-pointer-defaults-h)
 
   ;; --- Core Sidebar Settings ---
   (setq treemacs-collapse-dirs (if (bound-and-true-p treemacs-python-executable) 3 0)
         treemacs-display-in-side-window t
         treemacs-indentation 2         ; Folder indent spacing.
         treemacs-width 50               ; Default sidebar width in columns.
-        
+
         ;; UI Syncing:
         treemacs-follow-after-init t   ; Highlight the current file on startup.
         treemacs-file-follow-delay 0.2 ; How quickly to sync the sidebar with the editor.
-        
+
         ;; Persistence & Cleanup:
         treemacs-missing-project-action 'ask
         treemacs-no-delete-other-windows t ; Prevent sidebar from closing when splitting windows.
         treemacs-persist-file (expand-file-name ".cache/treemacs-persist" user-emacs-directory)
-        
+
         ;; Exclusion List: Hide "junk" directories to keep the tree clean.
         treemacs-litter-directories '("/node_modules" "/.venv" "/.cask" "/vendor")
-        
+
         treemacs-position 'left
         treemacs-show-hidden-files t   ; Show dotfiles like .env or .gitignore.
         treemacs-workspace-switch-cleanup nil)
 
+  ;; --- Auto-open newly created files ---
+  ;; `treemacs-create-file-functions' receives the path of anything created
+  ;; via `treemacs-create-file'/`treemacs-create-dir'. We visit files (not
+  ;; dirs) in the main editing area. The zero-second timer lets treemacs
+  ;; finish its own node-update/recenter first, so it doesn't fight us for
+  ;; window focus.
+  (defun jmc-treemacs-visit-created-file-h (path)
+    "Visit PATH in a non-sidebar window after Treemacs creates it."
+    (when (file-regular-p path)
+      (run-with-timer 0 nil (lambda () (find-file-other-window path)))))
+
+  (add-hook 'treemacs-create-file-functions #'jmc-treemacs-visit-created-file-h)
+
   ;; --- Treemacs Modes ---
-  
+
   (treemacs-follow-mode t)     ; Automatically select the current file in the tree.
   (treemacs-filewatch-mode t)   ; Refresh the tree if files are changed externally (e.g., Git pull).
   (treemacs-fringe-indicator-mode 'always) ; Show expansion icons in the left margin.
@@ -157,25 +212,80 @@
     (`(t . _) (treemacs-git-mode 'simple))))
 
 ;; =============================================================================
+;; VS CODE-STYLE PROJECT OPENING
+;; =============================================================================
+;;
+;; By default, `projectile-switch-project' (s-p p) immediately prompts you to
+;; pick a FILE in the new project — `projectile-find-file' is the default
+;; `projectile-switch-project-action'. We replace that with a VS Code /
+;; Cursor-style flow: the project opens with its full tree in the Treemacs
+;; sidebar (single-root, exclusively this project) and the project root in
+;; the main window — no file prompt. The dashboard's project entries use
+;; `projectile-switch-project-by-name', which runs the same action, so
+;; clicking a project there behaves identically.
+
+(defun jmc-projectile-switch-action-vscode ()
+  "Open the switched-to project VS Code-style: sidebar tree + root listing.
+Projectile calls this with `default-directory' bound to the new project's
+root. The Treemacs sidebar shows ONLY this project, and focus stays in
+the main window, ready for `s-p f' or the tree."
+  (require 'treemacs)
+  (let ((root default-directory))
+    ;; 1. Main area: the project root in Dired (rendered by dirvish).
+    ;;    Swap this line for whatever "landing" view you prefer — e.g.
+    ;;    (magit-status root) for a VCS-first flow — or delete it to keep
+    ;;    whatever buffer was already showing.
+    (dired root)
+    ;; 2. Sidebar: display this project exclusively, then hand focus back
+    ;;    to the main window (treemacs selects its own window when opening).
+    (let ((main-window (selected-window)))
+      (treemacs-add-and-display-current-project-exclusively)
+      (when (window-live-p main-window)
+        (select-window main-window)))))
+
+(setq projectile-switch-project-action #'jmc-projectile-switch-action-vscode)
+
+;; =============================================================================
 ;; SIDEBAR INTEGRATIONS
 ;; =============================================================================
 
-;; Unified Icons: Share Treemacs icons with Dired for visual consistency.
-(use-package treemacs-icons-dired
-  :ensure t
-  :hook (dired-mode . treemacs-icons-dired-enable-once))
+;; NOTE: the old `treemacs-icons-dired' integration was REMOVED. Dirvish
+;; (explorer.el) takes over every Dired buffer and renders its own icons and
+;; attributes; layering treemacs icons on top of dirvish buffers produces
+;; doubled/misaligned icons. If you ever drop dirvish, restore:
+;;   (use-package treemacs-icons-dired
+;;     :hook (dired-mode . treemacs-icons-dired-enable-once))
 
 ;; Magit Integration: Better Git awareness within the tree.
 (use-package treemacs-magit
   :after (treemacs magit)
-  :ensure t
   :defer t)
+
+;; Unify the sidebar with the config-wide nerd-icons backend.
+;; -> Treemacs otherwise ships its own bundled icon theme — the last
+;;    visually distinct icon family in the config. Expect the sidebar's
+;;    icons to change appearance after this loads.
+(use-package treemacs-nerd-icons
+  :after (treemacs nerd-icons)
+  :config
+  (treemacs-load-theme "nerd-icons")
+
+  ;; Give ICONS the hand pointer too. The `treemacs-button' category trick
+  ;; (treemacs block above) covers node LABELS only — icons are separate
+  ;; cached strings without the category property, which is why a label
+  ;; showed the hand while its own icon showed the arrow. Theme icons are
+  ;; SHARED string objects: adding the property to each string once covers
+  ;; every line that renders it. Must run AFTER the theme is loaded; the
+  ;; buffer picks it up on the next (re)render.
+  (maphash (lambda (_ext icon)
+             (when (and (stringp icon) (> (length icon) 0))
+               (add-text-properties 0 (length icon) '(pointer hand) icon)))
+           (treemacs-theme->gui-icons treemacs--current-theme)))
 
 ;; Projectile Integration: The "Bridge" package.
 ;; -> Ensures Treemacs understands Projectile's project definitions.
 (use-package treemacs-projectile
-  :after (treemacs projectile)
-  :ensure t)
+  :after (treemacs projectile))
 
 ;; =============================================================================
 ;; UNIFIED "JUMP" KEYMAP (SUPER-P)
@@ -195,10 +305,21 @@
 (define-key jmc-jump-map (kbd "f") 'projectile-find-file)        ; Find file in project.
 (define-key jmc-jump-map (kbd "b") 'projectile-switch-to-buffer) ; Search project buffers.
 (define-key jmc-jump-map (kbd "d") 'projectile-dired)            ; Open file manager at root.
-(define-key jmc-jump-map (kbd "g") 'projectile-grep)             ; Search text in project.
+;; Search text in project — `consult-ripgrep' (same engine as `M-s r'),
+;; not `projectile-grep': live-updating results in the Vertico UI instead
+;; of a static grep buffer, and one search frontend fewer to maintain.
+(define-key jmc-jump-map (kbd "g") 'consult-ripgrep)
 (define-key jmc-jump-map (kbd "c") 'projectile-compile-project)  ; Trigger build command.
-(define-key jmc-jump-map (kbd "r") 'projectile-run-vterm)        ; Launch terminal at root.
-(define-key jmc-jump-map (kbd "a") 'claude-code)                 ; Launch Claude at root.
+(define-key jmc-jump-map (kbd "a") 'claude-code)                 ; Launch Claude at root (ai.el).
+
+;; Terminal at project root.
+;; -> FIXED: this used to be `projectile-run-vterm' (and `s-p v' was
+;;    `vterm-toggle') — but NOTHING in this config installs vterm anymore;
+;;    the terminal is ghostel (terminal.el). Both keys signalled
+;;    void-function errors. `jmc-ghostel-toggle' already resolves the
+;;    project root itself, so it is the drop-in replacement. (`s-9' remains
+;;    the global toggle for the same drawer.)
+(define-key jmc-jump-map (kbd "r") 'jmc-ghostel-toggle)
 
 ;; 4. Treemacs Shortcuts (UI Controls)
 (defun jmc-find-top-git-root (dir)
@@ -237,9 +358,6 @@ When opening, display the topmost git root and navigate to the current file."
 
 (define-key jmc-jump-map (kbd "0") 'treemacs-select-window)      ; Focus the sidebar.
 (define-key jmc-jump-map (kbd "t") 'jmc-treemacs-smart-toggle)   ; Custom open & follow
-
-;; 5. Terminal Integration
-(define-key jmc-jump-map (kbd "v") 'vterm-toggle)                ; Toggle pop-up terminal.
 
 ;; =============================================================================
 ;; FINALIZE

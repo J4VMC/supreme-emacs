@@ -1,17 +1,22 @@
 # Emacs 30 Configuration for macOS
 
-A modern, IDE-like Emacs configuration for software development. This setup provides features similar to VS Code but runs entirely in Emacs.
+A modern, IDE-like Emacs configuration for software development. This setup provides an experience similar to VS Code or Cursor — including an integrated AI coding agent — but runs entirely in Emacs.
 
 ## What You'll Get
 
 - **Smart Code Completion**: Like IntelliSense in VS Code (Corfu + Cape)
+- **AI Coding Agents**: Claude Code integrated into the editor, plus a vendor-independent agent lane for Gemini (and any other ACP agent) — all with per-project credentials kept safely separated (claude-code + claude-code-ide + agent-shell + direnv)
 - **Syntax Highlighting**: Powered by tree-sitter (faster and more accurate)
-- **Project Navigation**: File tree sidebar (Treemacs) and fuzzy file search (Consult + Vertico)
-- **Git Integration**: Visual Git interface (Magit) with GitHub/GitLab PR integration (Forge)
+- **VS Code-style Projects**: Open a project and get the full file tree in a sidebar (Treemacs) — no "pick a file" prompt
+- **Fuzzy Search Everywhere**: Files, text, lines, and symbols (Consult + Vertico)
+- **Git Integration**: Visual Git interface (Magit) with GitHub/GitLab PR integration (Forge), TODO overview (magit-todos), and per-line change markers in the fringe (diff-hl)
 - **Auto-formatting**: Your code formats automatically when you save (Apheleia)
-- **Error Checking**: See errors and warnings as you type (Flycheck)
-- **Offline Documentation**: Blazing fast doc lookups (Dash-docs)
-- **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Java, Swift, Scala, Shell, SQL, MongoDB, Terraform, and more
+- **Error Checking**: See errors and warnings as you type (Flycheck), with a searchable error list (`M-s e`)
+- **Spell Checking**: Context-aware — checks prose in text files, but only comments and strings in code (jinx)
+- **Persistent Undo**: Undo history survives restarting Emacs, with a visual undo tree (undo-fu + vundo)
+- **Integrated Terminal**: Fast pop-up terminal drawer (ghostel, powered by libghostty)
+- **Consistent Icons**: One icon set (nerd-icons) across the dashboard, sidebar, file manager, and completion popups
+- **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Java, Swift, Scala, Shell, SQL, Docker, Terraform, and more
 
 ## Prerequisites
 
@@ -21,9 +26,11 @@ You need macOS and Homebrew installed. If you don't have Homebrew:
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
 ```
 
+This configuration assumes the **fish shell**. Most commands below are written for fish.
+
 ## Complete Installation Guide
 
-### Step 1: Install from Emacs+
+### Step 1: Install Emacs (emacs-plus)
 
 ```bash
 brew tap d12frosted/emacs-plus
@@ -38,7 +45,16 @@ emacs --version
 
 You should see "GNU Emacs 30.2" or similar.
 
-### Step 2: Install This Configuration
+### Step 2: Install the Fonts (Required)
+
+The configuration uses **FiraCode Nerd Font** as its main font, and **Symbols Nerd Font Mono** for all icons. Without the second one, icons appear cut in half or as hollow boxes.
+
+```bash
+brew install --cask font-fira-code-nerd-font
+brew install --cask font-symbols-only-nerd-font
+```
+
+### Step 3: Install This Configuration
 
 Modern Emacs uses the standard `.config` directory. If you have an existing Emacs config, back it up first:
 
@@ -59,16 +75,22 @@ Or if you want to clone it with the Catppuccin Mocha theme:
 git clone -b catppuccin git@github.com:J4VMC/emacs-modular.git ~/.config/emacs
 ```
 
-### Step 3: Install Core Tools (Required for Everyone)
-
-These tools are needed for basic functionality:
+### Step 4: Install Core Tools (Required for Everyone)
 
 ```bash
-# Libraries required by Emacs packages
-brew install ripgrep fd git libgccjit libvterm imagemagick
+# Libraries and tools required by Emacs packages
+brew install ripgrep fd git libgccjit imagemagick coreutils direnv enchant pkgconf
 ```
 
-### Step 4: Install Language-Specific Tools
+What these are for, in plain words: `ripgrep` and `fd` power fast project search, `libgccjit` lets Emacs compile packages to native code (speed), `coreutils` provides `gls` for nicer file listings, `enchant` + `pkgconf` power the spell checker (jinx compiles a small native module against them on first launch), and `direnv` loads each project's own environment variables (see [Per-Project Secrets](#per-project-secrets-envrc) below — this is also how the AI agent gets the _right_ credentials per client).
+
+Hook direnv into fish (one time):
+
+```bash
+echo 'direnv hook fish | source' >> ~/.config/fish/config.fish
+```
+
+### Step 5: Install Language-Specific Tools
 
 Install tools only for the languages you'll use. The configuration automatically detects and connects to them if they are installed on your system.
 
@@ -142,6 +164,8 @@ go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest  # Linter
 fish_add_path (go env GOPATH)/bin
 ```
 
+_(Bonus: opening a `go.mod` file also gets language-server support — dependency warnings and "upgrade dependency" actions come for free.)_
+
 ---
 
 #### Rust
@@ -169,7 +193,7 @@ brew install php composer
 
 # Install PHP development tools
 npm install -g intelephense                            # Language server
-composer global require squizlabs/php_code-sniffer     # Code style checker (phpcbf)
+composer global require squizlabs/php_codesniffer      # Code style checker (phpcbf)
 composer global require "dealerdirect/phpcodesniffer-composer-installer"
 phpcs --config-set --default_standard PSR12
 composer global require phpstan/phpstan                # Static analyzer
@@ -178,6 +202,8 @@ composer global require phpunit/phpunit                # Testing framework
 # Add Composer to Path
 fish_add_path (composer global config bin-dir --absolute)
 ```
+
+After your first launch, run `M-x php-ts-mode-install-parsers` once from inside any PHP file. This installs the extra syntax grammars PHP needs for highlighting doc-comments and inline HTML/CSS/JS.
 
 ---
 
@@ -272,15 +298,26 @@ brew install libxml2
 
 ---
 
-### Step 5: Install Combobulate
+### Step 6: Install the AI Agents (Optional but Recommended)
 
-The only package that elpaca fails to install from Github. It's a package that adds structured editing and movement to a wide range of programming languages.
+This configuration integrates [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), Anthropic's coding agent, directly into Emacs.
 
 ```bash
-git clone git@github.com:mickeynp/combobulate.git ~/.config/emacs/combobulate
+npm install -g @anthropic-ai/claude-code
+claude   # run once in a terminal to log in
 ```
 
-### Step 6: Start Emacs
+For **Gemini models**, install Google's agent CLI as well — Emacs drives it through the vendor-neutral agent-shell package (`C-c g`):
+
+```bash
+npm install -g @google/gemini-cli
+```
+
+The first `C-c g` session prompts you to authenticate — a personal Google login gives you a generous free tier, no API key needed.
+
+See the [AI Agent shortcuts](#ai-agents-claude-code--gemini) and [Per-Project Secrets](#per-project-secrets-envrc) sections below for how to use them safely with multiple clients or projects.
+
+### Step 7: Start Emacs
 
 ```bash
 emacs
@@ -290,10 +327,13 @@ emacs
 
 1. Emacs will automatically download and install packages (takes 2-5 minutes).
 2. You'll see a dashboard with recent files and projects.
-3. Emacs will prompt you to update packages (you can select `y` or `n`).
-4. When you open a code file, the `treesit-auto` package will automatically download and install the required syntax grammar in the background.
+3. Emacs may ask to update packages (answer `y` or `n`).
+4. When you open a code file for a language whose syntax grammar isn't installed yet, Emacs **asks permission** to install it. Answer `y` — it takes a few seconds, once per language.
+    - Prefer to get it all over with at once? Run `M-x treesit-auto-install-all` and grab a coffee.
 
-### Step 7: Verify Everything Works
+**Package updates & reproducibility:** packages auto-update in the background at most once a week. Once your setup works the way you like, run `M-x jmc-elpaca-write-lock` and commit the generated `elpaca.lock` file — from then on, every machine installs **exactly** those package versions, and automatic updates switch off. To update after that, run `M-x jmc-elpaca-update-unlocked` deliberately, verify everything still works, then re-run `M-x jmc-elpaca-write-lock`.
+
+### Step 8: Verify Everything Works
 
 Let's test with a Python file:
 
@@ -314,14 +354,15 @@ print(hello("World"))
 
 - ✅ Line numbers on the left
 - ✅ Syntax highlighting in color
-- ✅ Auto-completion popup when you type
+- ✅ Auto-completion popup when you type (with icons)
 - ✅ Code auto-formats when you save
+- ✅ After a `git commit`, colored change markers appear in the right fringe as you edit
 
 **If something doesn't work:**
 
 - Check that the language server is installed: `which basedpyright`
 - Open Emacs and press `M-x lsp-doctor` (hold Option/Alt, press x, type "lsp-doctor")
-- This will show you what's missing
+- If icons look cut in half or like empty boxes, re-check Step 2 (fonts), then restart Emacs.
 
 ## Understanding Emacs Key Notation
 
@@ -331,6 +372,8 @@ Emacs uses special notation for keyboard shortcuts:
 - `M-x` = Hold Option/Alt (⌥) and press x
 - `C-c t` = Hold Control and press c, then release and press t
 - `s-j` = Hold Command (⌘) and press j
+
+**Tip:** whenever you press a prefix (like `C-c` or `s-p`) and pause, a small panel pops up showing every key you can press next. You never need to memorize full tables — just start typing and read.
 
 ## Essential Keyboard Shortcuts
 
@@ -346,40 +389,55 @@ Our keybindings act as a hybrid between classic Emacs bindings and modern IDE co
 | `C-x b`   | Switch between open files |
 | `C-x C-c` | Quit Emacs                |
 
+Quitting asks its questions ("save this file?") in the small area at the very bottom of the frame — answer with `y` or `n` there.
+
 ### Window & Tab Management
 
-| Shortcut     | Action                               |
-| ------------ | ------------------------------------ |
-| `s-<arrows>` | Move focus between split windows     |
-| `s-t`        | Open a new tab (workspace)           |
-| `s-l`        | Close the current tab                |
-| `C-x 1`      | Maximize current window (close rest) |
-| `C-x 2`      | Split window vertically              |
-| `C-x 3`      | Split window horizontally            |
+| Shortcut     | Action                                            |
+| ------------ | ------------------------------------------------- |
+| `s-<arrows>` | Move focus between split windows                  |
+| `s-t`        | Open a new tab (workspace)                        |
+| `s-l`        | Close the current tab                             |
+| `C-c w`      | Window menu: resize with arrows, split, balance   |
+| `C-x 1`      | Maximize current window (close rest)              |
+| `C-x 2`      | Split window vertically                           |
+| `C-x 3`      | Split window horizontally                         |
+
+`C-c w` opens a small pop-up menu that stays active: tap the arrow keys repeatedly to resize the current window, `=` to re-balance, `q` (or any other command) to leave.
+
+### Projects (`s-p` Prefix)
+
+`Command-p` (`s-p`) is the central "Command Palette" for project actions. Switching to a project opens it **VS Code-style**: the full file tree appears in the sidebar and the project folder in the main window — no file prompt.
+
+| Shortcut  | Action                                      |
+| --------- | ------------------------------------------- |
+| `s-p p`   | Open / switch project (tree + folder view)  |
+| `s-p f`   | Find file in current project (Fuzzy)        |
+| `s-p g`   | Search text across project (live results)   |
+| `s-p t`   | Toggle file tree sidebar                    |
+| `s-p d`   | Open the project root in the file manager   |
+| `s-p r`   | Toggle the project terminal                 |
+| `s-p c`   | Compile / Build project                     |
+| `s-p A`   | Launch the AI agent for the current project |
+| `s-0`     | Move cursor focus to the file tree          |
+| `C-c t d` | Manually add a folder to the sidebar        |
+
+**In the sidebar and file manager:** a single click opens files and expands folders. The file manager navigates "in place" (entering a folder replaces the view instead of opening new buffers), and `^` goes up one level.
 
 ### Navigation & Search
 
-| Shortcut | Action                                        |
-| -------- | --------------------------------------------- |
-| `M-s l`  | Search for a line in the current file (Fuzzy) |
-| `M-s L`  | Search for a line across all open files       |
-| `M-s r`  | Project-wide text search (Ripgrep)            |
-| `C-c j`  | Jump instantly to any visible line            |
-| `s-j`    | Jump instantly to any visible character       |
+| Shortcut | Action                                          |
+| -------- | ----------------------------------------------- |
+| `C-s`    | Search in the current file (live, fuzzy)        |
+| `M-s L`  | Search for a line across all open files         |
+| `M-s o`  | Jump to a heading/function in the current file  |
+| `M-s r`  | Project-wide text search (Ripgrep)              |
+| `M-s e`  | Searchable list of the current buffer's errors  |
+| `M-s d`  | Search offline Dash docs (word at cursor)       |
+| `C-c j`  | Jump instantly to any visible line              |
+| `s-j`    | Jump instantly to any visible character         |
 
-### Project Management (`s-p` Prefix)
-
-We use the `Command-p` (`s-p`) prefix as our central "Command Palette" for project actions:
-
-| Shortcut | Action                               |
-| -------- | ------------------------------------ |
-| `s-p p`  | Switch between known projects        |
-| `s-p f`  | Find file in current project (Fuzzy) |
-| `s-p g`  | Grep (Search) text across project    |
-| `s-p t`  | Toggle file tree sidebar             |
-| `s-p 0`  | Focus cursor on the file tree        |
-| `s-p v`  | Toggle project terminal              |
-| `s-p c`  | Compile / Build project              |
+**Tips:** inside the `C-s` search, press `M-n` to insert the word under the cursor as the search term, and `C-.` to act on a result (e.g. export all matches to an editable list). `M-s l` is an alias for the same search. `C-r` still runs Emacs's classic incremental search, which also works inside keyboard macros.
 
 ### Git & GitHub (Magit & Forge)
 
@@ -397,56 +455,124 @@ We use the `Command-p` (`s-p`) prefix as our central "Command Palette" for proje
 - `@` = Open Forge menu (Pull Requests & Issues)
 - `q` = Quit Magit
 
+The status buffer also lists every `TODO` / `FIXME` in the project (magit-todos), and edited lines show colored markers in the right fringe of your code buffers, updating live as you type (diff-hl).
+
 > **Note on Forge (GitHub/GitLab Integration):**
 > To use Forge to manage Pull Requests, you must create a Personal Access Token on GitHub and store it in `~/.authinfo.gpg` using this format:
 > `machine api.github.com login YOUR_USERNAME^forge password YOUR_TOKEN`
 
 ### Terminal
 
-| Shortcut | Action                                 |
-| -------- | -------------------------------------- |
-| `s-9`    | Toggle "Quake-style" popup terminal    |
-| `M-k`    | Force kill terminal (bypasses prompts) |
+| Shortcut  | Action                                    |
+| --------- | ----------------------------------------- |
+| `s-9`     | Toggle "Quake-style" popup terminal       |
+| `C-u s-9` | Open an additional, separate terminal     |
+| `M-k`     | Force kill terminal (bypasses prompts)    |
+| `Cmd-V`   | Paste into the terminal (`C-v` works too) |
+
+### AI Agents (Claude Code & Gemini)
+
+Three integrations are included: a quick Claude command interface (`C-c c`), a full IDE-style Claude integration with diffs and tool access (`C-c i`), and a vendor-neutral agent shell currently wired to Gemini (`C-c g`).
+
+| Shortcut  | Action                                          |
+| --------- | ----------------------------------------------- |
+| `s-p A`   | Launch the agent for the current project        |
+| `C-c c`   | Claude Code command menu (pause to see options) |
+| `C-c i i` | Start an IDE-integrated agent session           |
+| `C-c i m` | Open the agent menu                             |
+| `C-c i t` | Show/hide the most recent agent window          |
+| `C-c i c` | Continue the previous conversation              |
+| `C-c i r` | Resume an earlier session                       |
+| `C-c i l` | List active sessions                            |
+| `C-c g`   | Start a Gemini agent session (agent-shell)      |
+
+**How the Gemini session differs:** it's a plain Emacs buffer, not a terminal app — search, copy, and paste work like in any other buffer. The agent's proposed file edits appear as inline diffs with approve/deny prompts (Claude's `C-c i` sessions instead open a side-by-side ediff where you accept or reject individual hunks). Under the hood it speaks ACP, an open protocol — the same interface can drive Codex, Goose, and other agents if you ever want them.
+
+**Important habit:** start any agent from a file _inside_ the project you want it to work on. The agent inherits that project's environment and credentials (see next section).
+
+### Per-Project Secrets (.envrc)
+
+Each project can have its own environment variables — API keys, database URLs, client credentials — in a `.envrc` file at the project root. They are loaded **per project** and never leak between projects, which matters when you work for multiple clients:
+
+1. Create a `.envrc` in the project root, e.g. `export API_KEY=...`
+   (better: put real secrets in a gitignored `.env.local` and have `.envrc` contain `dotenv .env.local`)
+2. Approve it once: `C-c e a` inside the project (or `direnv allow` in a terminal)
+3. After editing `.envrc`, reload with `C-c e r`
+
+Everything you launch from that project's buffers — terminals, language servers, the AI agent — automatically gets that project's environment, and only that one.
+
+To keep the AI agent from _reading_ your secret files, add this to `~/.claude/settings.json`:
+
+```json
+{
+	"permissions": {
+		"deny": ["Read(./.envrc)", "Read(./.env)", "Read(./.env.*)"]
+	}
+}
+```
 
 ### Code Navigation & Intelligence (LSP)
 
-| Shortcut    | Action                                    |
-| ----------- | ----------------------------------------- |
-| `M-.`       | Go to definition                          |
-| `M-,`       | Go back                                   |
-| `M-?`       | Find all references                       |
-| `C-c C-d`   | Show LSP hover documentation              |
-| `M-s d`     | Search offline Dash docs (word at cursor) |
-| `M-n`       | Jump to next code error                   |
-| `M-p`       | Jump to previous code error               |
-| `C-c l r r` | Rename symbol across project              |
+| Shortcut    | Action                                   |
+| ----------- | ---------------------------------------- |
+| `M-.`       | Go to definition                         |
+| `M-,`       | Go back                                  |
+| `M-?`       | Find all references                      |
+| `M-n`       | Jump to next code error                  |
+| `M-p`       | Jump to previous code error              |
+| `C-c l`     | All LSP commands (pause to see the menu) |
+| `C-c l r r` | Rename symbol across project             |
 
 ### Editing (CUA Mode Enabled)
 
 This configuration enables `cua-mode`, meaning standard OS copy/paste shortcuts work when text is highlighted:
 
-| Shortcut  | Action                                                 |
-| --------- | ------------------------------------------------------ |
-| `C-space` | Start selection                                        |
-| `C-c`     | Copy (when text is selected)                           |
-| `C-x`     | Cut (when text is selected)                            |
-| `C-v`     | Paste (when text is selected)                          |
-| `M-J`     | Expand selection semantically (word -> string -> func) |
-| `M-/`     | Comment / Uncomment line or block                      |
-| `C-/`     | Undo                                                   |
-| `M-up`    | Move current line/selection up                         |
-| `M-down`  | Move current line/selection down                       |
+| Shortcut        | Action                                                 |
+| --------------- | ------------------------------------------------------ |
+| `C-space`       | Start selection                                        |
+| `C-c`           | Copy (when text is selected)                           |
+| `C-x`           | Cut (when text is selected)                            |
+| `C-v`           | Paste (when text is selected)                          |
+| `C-z`           | Undo                                                   |
+| `C-S-z`         | Redo                                                   |
+| `M-J`           | Expand selection semantically (word -> string -> func) |
+| `M-/`           | Comment / Uncomment line or block                      |
+| `M-$`           | Correct the misspelled word at cursor                  |
+| `s-<backspace>` | Fold / unfold the code block at cursor                 |
 
-### Debugging (DAP Mode)
+Your undo history is **saved to disk**: even after restarting Emacs, you can keep undoing yesterday's edits. Run `M-x vundo` to browse the whole undo history as a visual tree.
 
-| Shortcut  | Action                            |
-| --------- | --------------------------------- |
-| `C-c d d` | Start Debugging (select template) |
-| `C-c d b` | Toggle Breakpoint                 |
-| `C-c d n` | Step Over                         |
-| `C-c d i` | Step Into                         |
-| `C-c d c` | Continue                          |
-| `C-c d r` | Stop / Disconnect Debugger        |
+**Multiple cursors** (edit many places at once):
+
+| Shortcut  | Action                                                  |
+| --------- | ------------------------------------------------------- |
+| `C-c m`   | Cursor menu: place cursors with single keys (see below) |
+| `C->`     | Add a cursor at the next matching word                  |
+| `C-<`     | Add a cursor at the previous matching word              |
+| `C-c C-<` | Add cursors at ALL matching words                       |
+| `C-M-j`   | Add a cursor to each selected line                      |
+
+`C-c m` is the comfortable way in: a pop-up menu where `n`/`p` mark the next/previous match, `N`/`P` skip one, `u`/`U` unmark — then just start typing to edit with all cursors (`C-g` collapses back to one).
+
+### Debugging (Dape)
+
+Press `C-c d` and pause to see all debugger actions. **The best way to drive a session is `C-c d h`**: it opens a pop-up menu that stays active, so stepping is single keys — `n` (next), `i` (in), `o` (out), `c` (continue) — instead of re-typing the prefix for every step.
+
+| Shortcut  | Action                             |
+| --------- | ---------------------------------- |
+| `C-c d h` | Debug menu (one-key stepping)      |
+| `C-c d d` | Start Debugging (select template)  |
+| `C-c d b` | Toggle Breakpoint                  |
+| `C-c d B` | Remove all Breakpoints             |
+| `C-c d n` | Step Over                          |
+| `C-c d i` | Step Into                          |
+| `C-c d o` | Step Out                           |
+| `C-c d c` | Continue                           |
+| `C-c d w` | Show debug info windows            |
+| `C-c d R` | Restart                            |
+| `C-c d r` | Quit debugging                     |
+
+_(In Rust files, `C-c C-c d` starts the debugger with Rust-specific setup.)_
 
 ### Getting Help
 
@@ -456,3 +582,5 @@ This configuration enables `cua-mode`, meaning standard OS copy/paste shortcuts 
 | `C-h k`  | Describe key (press this, then press another key) |
 | `C-h f`  | Describe function                                 |
 | `C-h v`  | Describe variable                                 |
+
+The help pages in this config are upgraded (helpful.el): they show the documentation, the source code, and usage examples in one place.
