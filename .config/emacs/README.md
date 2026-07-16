@@ -66,14 +66,13 @@ mv ~/.emacs.d ~/.emacs.d.backup
 Clone and set up this configuration with the Gruvbox Dark Hard theme:
 
 ```bash
-git clone git@github.com:J4VMC/emacs-modular.git ~/.config/emacs
+git clone git@github.com:J4VMC/supreme-emacs.git ~/.config/emacs
 ```
 
-Or if you want to clone it with the Catppuccin Mocha theme:
-
-```bash
-git clone -b catppuccin git@github.com:J4VMC/emacs-modular.git ~/.config/emacs
-```
+> An older snapshot of this configuration with a Catppuccin Mocha theme
+> exists on the `catppuccin` branch of the (unmaintained) predecessor repo,
+> [`J4VMC/emacs-modular`](https://github.com/J4VMC/emacs-modular) — it
+> predates many of the fixes and features documented here.
 
 ### Step 4: Install Core Tools (Required for Everyone)
 
