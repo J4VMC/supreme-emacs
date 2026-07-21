@@ -189,13 +189,18 @@
   ;; --- Auto-open newly created files ---
   ;; `treemacs-create-file-functions' receives the path of anything created
   ;; via `treemacs-create-file'/`treemacs-create-dir'. We visit files (not
-  ;; dirs) in the main editing area. The zero-second timer lets treemacs
-  ;; finish its own node-update/recenter first, so it doesn't fight us for
-  ;; window focus.
+  ;; dirs) in the main editing area. This must be an IDLE timer: a plain
+  ;; `run-with-timer' with delay 0 fires inside the `accept-process-output'
+  ;; calls treemacs makes while awaiting its async git/flatten helpers —
+  ;; i.e. in the middle of `treemacs--create-file/dir'. Visiting the file
+  ;; at that point steals the selected window and current buffer, which
+  ;; made the command's final `recenter' fail ("'recenter'ing a window
+  ;; that does not display current-buffer") and raced its process
+  ;; sentinels. Idle timers only fire once the command loop is done.
   (defun jmc-treemacs-visit-created-file-h (path)
     "Visit PATH in a non-sidebar window after Treemacs creates it."
     (when (file-regular-p path)
-      (run-with-timer 0 nil (lambda () (find-file-other-window path)))))
+      (run-with-idle-timer 0 nil (lambda () (find-file-other-window path)))))
 
   (add-hook 'treemacs-create-file-functions #'jmc-treemacs-visit-created-file-h)
 
