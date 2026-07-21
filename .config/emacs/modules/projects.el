@@ -209,7 +209,18 @@
   (pcase (cons (not (null (executable-find "git")))
                (not (null (bound-and-true-p treemacs-python-executable))))
     (`(t . t) (treemacs-git-mode 'deferred))
-    (`(t . _) (treemacs-git-mode 'simple))))
+    (`(t . _) (treemacs-git-mode 'simple)))
+
+  ;; Expanding a directory parses the output of an async python helper
+  ;; (`treemacs-dirs-to-collapse.py') with a raw `read'. When that output
+  ;; comes back empty — seen as transient "treemacs--expand-dir-node: End
+  ;; of file during parsing" errors that abort the whole expansion — treat
+  ;; it as "nothing to flatten" instead of failing.
+  (define-advice treemacs--parse-flattened-dirs
+      (:around (fn &rest args) jmc-eof-guard)
+    (condition-case nil
+        (apply fn args)
+      (end-of-file nil))))
 
 ;; =============================================================================
 ;; VS CODE-STYLE PROJECT OPENING

@@ -109,7 +109,24 @@
 
   ;; Preview the file at point in a small popup while narrowing candidates
   ;; in `find-file' / `s-p f' — VS Code's Quick Open preview, roughly.
-  (dirvish-peek-mode 1))
+  (dirvish-peek-mode 1)
+
+  ;; Dirvish-peek picks its preview window via `minibuffer-selected-window'.
+  ;; When the minibuffer is entered from the treemacs sidebar (e.g.
+  ;; `treemacs-create-file'), that window is dedicated, so every preview
+  ;; update dies with "Window is dedicated to ‘ *Treemacs-Buffer-...’" —
+  ;; once per keystroke, via `set-window-buffer' in `dirvish--preview-update'.
+  ;; Repair the peek session to target a normal window instead; when no
+  ;; normal window exists, previews are silently skipped for that prompt.
+  (defun jmc-dirvish-peek-avoid-dedicated-a (&rest _)
+    "Keep dirvish-peek previews out of dedicated/side windows."
+    (when-let* ((dv (dirvish--get-session 'type 'peek))
+                (win (dv-preview-window dv)))
+      (when (or (window-dedicated-p win)
+                (window-parameter win 'window-side))
+        (setf (dv-preview-window dv)
+              (get-mru-window nil nil :not-selected)))))
+  (advice-add 'dirvish-peek-setup-h :after #'jmc-dirvish-peek-avoid-dedicated-a))
 
 ;; Oil.el is a modern alternative inspired by Vim's `oil.nvim`.
 ;; -> It allows you to create files by literally editing the directory buffer
