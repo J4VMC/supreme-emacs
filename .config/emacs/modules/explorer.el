@@ -126,7 +126,30 @@
                 (window-parameter win 'window-side))
         (setf (dv-preview-window dv)
               (get-mru-window nil nil :not-selected)))))
-  (advice-add 'dirvish-peek-setup-h :after #'jmc-dirvish-peek-avoid-dedicated-a))
+  (advice-add 'dirvish-peek-setup-h :after #'jmc-dirvish-peek-avoid-dedicated-a)
+
+  ;; The `vc-state'/`git-msg' attributes make dirvish collect directory data
+  ;; with a batch child-Emacs process (`dirvish--make-proc'). The vc
+  ;; fetcher's sentinel (dirvish-vc.el) does `(read (buffer-string))' with
+  ;; no exit-status check and no error handling, so a fetcher that gets
+  ;; killed early (e.g. preview churn while typing in the minibuffer) or a
+  ;; child that dies leaves an empty buffer and spams "error in process
+  ;; sentinel: End of file during parsing". Wrap every dirvish process
+  ;; sentinel to clean up quietly instead; missing vc annotations for that
+  ;; one listing are the only cost. Unfixed upstream as of 2026-07.
+  (define-advice dirvish--make-proc (:filter-args (args) jmc-guard-sentinel)
+    (pcase-let ((`(,form ,sentinel . ,rest) args))
+      (cons form
+            (cons (lambda (proc status)
+                    (condition-case err
+                        (funcall sentinel proc status)
+                      (error
+                       (let ((inhibit-message t))
+                         (message "dirvish data fetch failed: %S" err))
+                       (ignore-errors (delete-process proc))
+                       (ignore-errors
+                         (dirvish--kill-buffer (process-buffer proc))))))
+                  rest)))))
 
 ;; Oil.el is a modern alternative inspired by Vim's `oil.nvim`.
 ;; -> It allows you to create files by literally editing the directory buffer
