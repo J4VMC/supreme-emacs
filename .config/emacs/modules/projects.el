@@ -54,6 +54,10 @@
 (defvar jmc-jump-map)
 (defvar projectile-known-projects)
 (defvar persp-mode-prefix-key)
+(defvar persp-modestring-short)
+(defvar persp-consult-source)
+(defvar consult-buffer-sources)
+(defvar consult--source-buffer)
 
 (declare-function dashboard-refresh-buffer "dashboard")
 (declare-function persp-mode "perspective")
@@ -159,8 +163,31 @@
   ;; access to the full perspective command set (s: switch, r: rename,
   ;; c: kill, b: switch buffer in persp, ...).
   (setq persp-mode-prefix-key (kbd "C-c p"))
+
+  ;; Mode-line: show only the CURRENT perspective's name, not the whole
+  ;; list. Perspective publishes its modestring through
+  ;; `global-mode-string', which telephone-line already renders in its
+  ;; misc-info segment (bottom right) — no extra wiring needed. The
+  ;; default (full list of every open perspective) grows unbounded as
+  ;; projects are opened; the current name is the only part that matters.
+  (setq persp-modestring-short t)
   :config
-  (persp-mode 1))
+  (persp-mode 1)
+
+  ;; Consult integration: scope `C-x b' to the current perspective.
+  ;; -> Without this, `consult-buffer' lists EVERY buffer globally,
+  ;;    defeating the whole point of per-project isolation. Perspective
+  ;;    ships a ready-made consult source; we make it the default and
+  ;;    HIDE (not remove) consult's global buffer source. The global
+  ;;    list stays one narrow away: `C-x b / b' (consult-narrow-key is
+  ;;    "/", see completion.el) — useful for grabbing a buffer that
+  ;;    lives in another perspective.
+  ;; -> Runs in `with-eval-after-load': consult is deferred behind its
+  ;;    autoloaded keybindings (completion.el) and usually loads AFTER
+  ;;    perspective does at startup.
+  (with-eval-after-load 'consult
+    (consult-customize consult--source-buffer :hidden t :default nil)
+    (add-to-list 'consult-buffer-sources persp-consult-source)))
 
 ;; Projectile Integration: The "Bridge" package.
 ;; -> Provides `projectile-persp-switch-project': switch to (or create) a
