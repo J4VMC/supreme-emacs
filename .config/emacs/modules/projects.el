@@ -16,6 +16,10 @@
 ;;    Provides a classic IDE-style file explorer sidebar. It allows you to browse
 ;;    the file tree visually using either the keyboard or mouse.
 ;;
+;; 3. Perspective: The "Workspace" Layer.
+;;    Each project opens in its own perspective — an isolated buffer list and
+;;    window layout — bridged to Projectile via `persp-projectile'.
+;;
 ;; We also unify these tools under a custom "Jump" keymap using the `s-p`
 ;; (Super-p) prefix for a streamlined developer experience.
 ;;
@@ -49,9 +53,12 @@
 (defvar treemacs-create-file-functions)
 (defvar jmc-jump-map)
 (defvar projectile-known-projects)
+(defvar persp-mode-prefix-key)
 
 (declare-function dashboard-refresh-buffer "dashboard")
+(declare-function persp-mode "perspective")
 (declare-function projectile-mode "projectile")
+(declare-function treemacs-set-scope-type "treemacs-scope")
 (declare-function projectile-project-root "projectile")
 (declare-function treemacs-follow-mode "treemacs")
 (declare-function treemacs-filewatch-mode "treemacs")
@@ -132,6 +139,37 @@
                   (eq (window-buffer (selected-window))
                       (get-buffer "*dashboard*")))
          (dashboard-refresh-buffer))))))
+
+;; =============================================================================
+;; PERSPECTIVE (PER-PROJECT WORKSPACES)
+;; =============================================================================
+;;
+;; Perspective gives each "workspace" its own isolated buffer list and window
+;; layout. Combined with Projectile (via `persp-projectile' below), every
+;; project you open gets its own perspective: buffers from project A never
+;; clutter project B's buffer switcher, and each project remembers its own
+;; window arrangement when you switch back to it.
+
+(use-package perspective
+  :init
+  ;; Perspective refuses to enable unless a prefix key is set (or the
+  ;; warning is explicitly suppressed). "C-c p" is free here — Projectile's
+  ;; default map on that key was disabled above (`projectile-enable-keymap'
+  ;; nil), and all project actions live on `s-p' instead. This prefix gives
+  ;; access to the full perspective command set (s: switch, r: rename,
+  ;; c: kill, b: switch buffer in persp, ...).
+  (setq persp-mode-prefix-key (kbd "C-c p"))
+  :config
+  (persp-mode 1))
+
+;; Projectile Integration: The "Bridge" package.
+;; -> Provides `projectile-persp-switch-project': switch to (or create) a
+;;    perspective NAMED AFTER the project, THEN run the normal projectile
+;;    switch flow inside it. If the project's perspective already exists,
+;;    it just switches to it — window layout and buffers restored as you
+;;    left them, no re-run of `projectile-switch-project-action'.
+(use-package persp-projectile
+  :after (perspective projectile))
 
 ;; =============================================================================
 ;; TREEMACS (THE VISUAL SIDEBAR)
@@ -231,14 +269,15 @@
 ;; VS CODE-STYLE PROJECT OPENING
 ;; =============================================================================
 ;;
-;; By default, `projectile-switch-project' (s-p p) immediately prompts you to
+;; By default, `projectile-switch-project' immediately prompts you to
 ;; pick a FILE in the new project — `projectile-find-file' is the default
 ;; `projectile-switch-project-action'. We replace that with a VS Code /
 ;; Cursor-style flow: the project opens with its full tree in the Treemacs
 ;; sidebar (single-root, exclusively this project) and the project root in
-;; the main window — no file prompt. The dashboard's project entries use
-;; `projectile-switch-project-by-name', which runs the same action, so
-;; clicking a project there behaves identically.
+;; the main window — no file prompt. Both `s-p p' and the dashboard's
+;; project entries go through `projectile-persp-switch-project', which
+;; creates/switches the project's perspective and then runs this same
+;; action, so both entry points behave identically.
 
 (defun jmc-projectile-switch-action-vscode ()
   "Open the switched-to project VS Code-style: sidebar tree + root listing.
@@ -303,6 +342,19 @@ the main window, ready for `s-p f' or the tree."
 (use-package treemacs-projectile
   :after (treemacs projectile))
 
+;; Perspective Integration: one sidebar per perspective.
+;; -> WITHOUT this, Treemacs keeps a single global workspace across all
+;;    perspectives: our switch action displays each project EXCLUSIVELY,
+;;    so opening project B would silently rewrite what project A's
+;;    perspective shows in its sidebar when you switch back. Scoping by
+;;    perspective gives every project workspace its own Treemacs buffer
+;;    and workspace, so each perspective's sidebar keeps showing its own
+;;    project tree.
+(use-package treemacs-perspective
+  :after (treemacs perspective)
+  :config
+  (treemacs-set-scope-type 'Perspectives))
+
 ;; =============================================================================
 ;; UNIFIED "JUMP" KEYMAP (SUPER-P)
 ;; =============================================================================
@@ -317,7 +369,10 @@ the main window, ready for `s-p f' or the tree."
 
 ;; 3. Projectile Shortcuts (Project Logic)
 ;; -> No `with-eval-after-load` needed! These are just pointers to commands.
-(define-key jmc-jump-map (kbd "p") 'projectile-switch-project)   ; Open another project.
+;; Open another project — in its OWN perspective (persp-projectile). Falls
+;; through to the same `projectile-switch-project-action' (VS Code-style
+;; flow below) when the perspective is new.
+(define-key jmc-jump-map (kbd "p") 'projectile-persp-switch-project)
 (define-key jmc-jump-map (kbd "f") 'projectile-find-file)        ; Find file in project.
 (define-key jmc-jump-map (kbd "b") 'projectile-switch-to-buffer) ; Search project buffers.
 (define-key jmc-jump-map (kbd "d") 'projectile-dired)            ; Open file manager at root.
