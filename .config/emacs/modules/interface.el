@@ -540,7 +540,13 @@
 ;; Activate the dashboard lock when dashboard-mode starts.
 (add-hook 'dashboard-mode-hook #'setup-dashboard-lock)
 
-(setq dashboard-projects-switch-function 'projectile-switch-project-by-name)
+;; Open dashboard projects through persp-projectile (projects.el): clicking
+;; a project creates (or re-enters) a perspective named after it, then runs
+;; the normal VS Code-style switch action inside that perspective. The
+;; dashboard itself stays behind in the initial "main" perspective.
+;; -> Just a symbol here — resolved when clicked, by which point
+;;    persp-projectile's autoloads are in place.
+(setq dashboard-projects-switch-function 'projectile-persp-switch-project)
 
 ;; -----------------------------------------------------------------------------
 ;; Smarter Per-Project Icons
