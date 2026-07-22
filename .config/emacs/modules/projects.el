@@ -55,12 +55,19 @@
 (defvar projectile-known-projects)
 (defvar persp-mode-prefix-key)
 (defvar persp-modestring-short)
+(defvar persp-state-default-file)
+(defvar persp-initial-frame-name)
 (defvar persp-consult-source)
 (defvar consult-buffer-sources)
 (defvar consult--source-buffer)
 
 (declare-function dashboard-refresh-buffer "dashboard")
+(declare-function dashboard-open "dashboard")
+(declare-function no-littering-expand-var-file-name "no-littering")
 (declare-function persp-mode "perspective")
+(declare-function persp-state-save "perspective")
+(declare-function persp-state-load "perspective")
+(declare-function persp-switch "perspective")
 (declare-function projectile-mode "projectile")
 (declare-function treemacs-set-scope-type "treemacs-scope")
 (declare-function projectile-project-root "projectile")
@@ -171,8 +178,57 @@
   ;; default (full list of every open perspective) grows unbounded as
   ;; projects are opened; the current name is the only part that matters.
   (setq persp-modestring-short t)
+
+  ;; Where the saved workspace state lives. no-littering's var/ directory
+  ;; keeps it out of the config root; the file itself is a readable elisp
+  ;; form. (no-littering covers the unrelated `persp-mode' package, not
+  ;; this one, so the path is set explicitly.)
+  (setq persp-state-default-file
+        (no-littering-expand-var-file-name "persp-state.el"))
   :config
   (persp-mode 1)
+
+  ;; --- Workspace persistence across restarts ---
+  ;;
+  ;; SAVE on every exit; RESTORE automatically on the next launch. Only
+  ;; FILE-visiting buffers survive the round trip — starred/special
+  ;; buffers (dashboard, terminals, Treemacs sidebars) are saved as
+  ;; placeholders and recreated on demand instead. Manual escape
+  ;; hatches remain on `C-c p C-s' (save) and `C-c p C-l' (load).
+
+  (defun jmc-persp-state-save-h ()
+    "Save perspective state on exit, never blocking Emacs from quitting."
+    (when (and (bound-and-true-p persp-mode) persp-state-default-file)
+      (condition-case err
+          (persp-state-save)
+        (error (message "Perspective save failed: %s"
+                        (error-message-string err))))))
+  (add-hook 'kill-emacs-hook #'jmc-persp-state-save-h)
+
+  (defun jmc-persp-state-restore-h ()
+    "Restore last session's workspaces, then land back on the dashboard.
+`persp-state-load' finishes in whichever perspective was iterated
+last, and the initial perspective's saved layout shows a placeholder
+where the dashboard buffer used to be — so switch back to the initial
+perspective and re-open the dashboard as the landing page."
+    (when (file-exists-p persp-state-default-file)
+      (condition-case err
+          (progn
+            (persp-state-load persp-state-default-file)
+            (persp-switch persp-initial-frame-name)
+            (when (fboundp 'dashboard-open)
+              (dashboard-open)))
+        (error (message "Perspective restore failed: %s"
+                        (error-message-string err))))))
+
+  ;; Restore AFTER Elpaca has processed every startup queue — the load
+  ;; visits saved files, whose major modes may live in packages that are
+  ;; still activating during init. Skipped when Emacs was started with a
+  ;; file argument (e.g. `emacs file.txt'), mirroring the dashboard's own
+  ;; initial-buffer guard in interface.el: in that case you asked for a
+  ;; specific file, not for your workspaces back.
+  (unless (> (length command-line-args) 1)
+    (add-hook 'elpaca-after-init-hook #'jmc-persp-state-restore-h))
 
   ;; Consult integration: scope `C-x b' to the current perspective.
   ;; -> Without this, `consult-buffer' lists EVERY buffer globally,

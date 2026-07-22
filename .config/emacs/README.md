@@ -413,6 +413,8 @@ Every project also gets its **own workspace** (a "perspective"): its buffers, wi
 
 The isolation runs through the whole config: `C-x b` lists only the current workspace's buffers (press `/ b` inside it to reach every buffer globally — handy for pulling a buffer over from another project), and the mode-line's bottom-right corner always shows which workspace you're in.
 
+**Workspaces survive restarts.** On quit, all workspaces are saved automatically; on the next launch they're restored — every project workspace comes back with its files and window layout, and you still land on the dashboard. Only file-visiting buffers are restored: terminals, sidebars, and other special buffers are recreated on demand. Starting Emacs with a file argument (`emacs file.txt`) skips the restore. Manual save/load: `C-c p C-s` / `C-c p C-l`.
+
 | Shortcut  | Action                                      |
 | --------- | ------------------------------------------- |
 | `s-p p`   | Open / switch project (own workspace, tree + folder view) |
