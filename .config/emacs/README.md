@@ -8,6 +8,7 @@ A modern, IDE-like Emacs configuration for software development. This setup prov
 - **AI Coding Agents**: Claude Code integrated into the editor, plus a vendor-independent agent lane for Gemini (and any other ACP agent) — all with per-project credentials kept safely separated (claude-code + claude-code-ide + agent-shell + direnv)
 - **Syntax Highlighting**: Powered by tree-sitter (faster and more accurate)
 - **VS Code-style Projects**: Open a project and get the full file tree in a sidebar (Treemacs) — no "pick a file" prompt
+- **Per-Project Workspaces**: Every project opens in its own workspace with an isolated buffer list, window layout, and sidebar (Perspective + Projectile) — switching back restores everything exactly as you left it
 - **Fuzzy Search Everywhere**: Files, text, lines, and symbols (Consult + Vertico)
 - **Git Integration**: Visual Git interface (Magit) with GitHub/GitLab PR integration (Forge), TODO overview (magit-todos), and per-line change markers in the fringe (diff-hl)
 - **Auto-formatting**: Your code formats automatically when you save (Apheleia)
@@ -408,9 +409,11 @@ Quitting asks its questions ("save this file?") in the small area at the very bo
 
 `Command-p` (`s-p`) is the central "Command Palette" for project actions. Switching to a project opens it **VS Code-style**: the full file tree appears in the sidebar and the project folder in the main window — no file prompt.
 
+Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p` or by clicking it on the dashboard — creates its workspace (or re-enters it, restored exactly as you left it). The dashboard itself lives in the initial `main` workspace, so it's always there to come back to.
+
 | Shortcut  | Action                                      |
 | --------- | ------------------------------------------- |
-| `s-p p`   | Open / switch project (tree + folder view)  |
+| `s-p p`   | Open / switch project (own workspace, tree + folder view) |
 | `s-p f`   | Find file in current project (Fuzzy)        |
 | `s-p g`   | Search text across project (live results)   |
 | `s-p t`   | Toggle file tree sidebar                    |
@@ -420,6 +423,18 @@ Quitting asks its questions ("save this file?") in the small area at the very bo
 | `s-p A`   | Launch the AI agent for the current project |
 | `s-0`     | Move cursor focus to the file tree          |
 | `C-c t d` | Manually add a folder to the sidebar        |
+
+**Workspace management** lives on the `C-c p` prefix (press it and pause to see every option):
+
+| Shortcut  | Action                                        |
+| --------- | --------------------------------------------- |
+| `C-c p s` | Switch workspace by name (or create one)      |
+| `C-c p n` | Next workspace                                |
+| `C-c p p` | Previous workspace                            |
+| `C-c p b` | Switch buffer within the current workspace    |
+| `C-c p r` | Rename the current workspace                  |
+| `C-c p c` | Close the current workspace                   |
+| `C-c p k` | Remove a buffer from the current workspace    |
 
 **In the sidebar and file manager:** a single click opens files and expands folders. The file manager navigates "in place" (entering a folder replaces the view instead of opening new buffers), and `^` goes up one level.
 
