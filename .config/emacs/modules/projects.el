@@ -54,9 +54,20 @@
 (defvar jmc-jump-map)
 (defvar projectile-known-projects)
 (defvar persp-mode-prefix-key)
+(defvar persp-modestring-short)
+(defvar persp-state-default-file)
+(defvar persp-initial-frame-name)
+(defvar persp-consult-source)
+(defvar consult-buffer-sources)
+(defvar consult--source-buffer)
 
 (declare-function dashboard-refresh-buffer "dashboard")
+(declare-function dashboard-open "dashboard")
+(declare-function no-littering-expand-var-file-name "no-littering")
 (declare-function persp-mode "perspective")
+(declare-function persp-state-save "perspective")
+(declare-function persp-state-load "perspective")
+(declare-function persp-switch "perspective")
 (declare-function projectile-mode "projectile")
 (declare-function treemacs-set-scope-type "treemacs-scope")
 (declare-function projectile-project-root "projectile")
@@ -159,8 +170,80 @@
   ;; access to the full perspective command set (s: switch, r: rename,
   ;; c: kill, b: switch buffer in persp, ...).
   (setq persp-mode-prefix-key (kbd "C-c p"))
+
+  ;; Mode-line: show only the CURRENT perspective's name, not the whole
+  ;; list. Perspective publishes its modestring through
+  ;; `global-mode-string', which telephone-line already renders in its
+  ;; misc-info segment (bottom right) — no extra wiring needed. The
+  ;; default (full list of every open perspective) grows unbounded as
+  ;; projects are opened; the current name is the only part that matters.
+  (setq persp-modestring-short t)
+
+  ;; Where the saved workspace state lives. no-littering's var/ directory
+  ;; keeps it out of the config root; the file itself is a readable elisp
+  ;; form. (no-littering covers the unrelated `persp-mode' package, not
+  ;; this one, so the path is set explicitly.)
+  (setq persp-state-default-file
+        (no-littering-expand-var-file-name "persp-state.el"))
   :config
-  (persp-mode 1))
+  (persp-mode 1)
+
+  ;; --- Workspace persistence across restarts ---
+  ;;
+  ;; SAVE on every exit; RESTORE automatically on the next launch. Only
+  ;; FILE-visiting buffers survive the round trip — starred/special
+  ;; buffers (dashboard, terminals, Treemacs sidebars) are saved as
+  ;; placeholders and recreated on demand instead. Manual escape
+  ;; hatches remain on `C-c p C-s' (save) and `C-c p C-l' (load).
+
+  (defun jmc-persp-state-save-h ()
+    "Save perspective state on exit, never blocking Emacs from quitting."
+    (when (and (bound-and-true-p persp-mode) persp-state-default-file)
+      (condition-case err
+          (persp-state-save)
+        (error (message "Perspective save failed: %s"
+                        (error-message-string err))))))
+  (add-hook 'kill-emacs-hook #'jmc-persp-state-save-h)
+
+  (defun jmc-persp-state-restore-h ()
+    "Restore last session's workspaces, then land back on the dashboard.
+`persp-state-load' finishes in whichever perspective was iterated
+last, and the initial perspective's saved layout shows a placeholder
+where the dashboard buffer used to be — so switch back to the initial
+perspective and re-open the dashboard as the landing page."
+    (when (file-exists-p persp-state-default-file)
+      (condition-case err
+          (progn
+            (persp-state-load persp-state-default-file)
+            (persp-switch persp-initial-frame-name)
+            (when (fboundp 'dashboard-open)
+              (dashboard-open)))
+        (error (message "Perspective restore failed: %s"
+                        (error-message-string err))))))
+
+  ;; Restore AFTER Elpaca has processed every startup queue — the load
+  ;; visits saved files, whose major modes may live in packages that are
+  ;; still activating during init. Skipped when Emacs was started with a
+  ;; file argument (e.g. `emacs file.txt'), mirroring the dashboard's own
+  ;; initial-buffer guard in interface.el: in that case you asked for a
+  ;; specific file, not for your workspaces back.
+  (unless (> (length command-line-args) 1)
+    (add-hook 'elpaca-after-init-hook #'jmc-persp-state-restore-h))
+
+  ;; Consult integration: scope `C-x b' to the current perspective.
+  ;; -> Without this, `consult-buffer' lists EVERY buffer globally,
+  ;;    defeating the whole point of per-project isolation. Perspective
+  ;;    ships a ready-made consult source; we make it the default and
+  ;;    HIDE (not remove) consult's global buffer source. The global
+  ;;    list stays one narrow away: `C-x b / b' (consult-narrow-key is
+  ;;    "/", see completion.el) — useful for grabbing a buffer that
+  ;;    lives in another perspective.
+  ;; -> Runs in `with-eval-after-load': consult is deferred behind its
+  ;;    autoloaded keybindings (completion.el) and usually loads AFTER
+  ;;    perspective does at startup.
+  (with-eval-after-load 'consult
+    (consult-customize consult--source-buffer :hidden t :default nil)
+    (add-to-list 'consult-buffer-sources persp-consult-source)))
 
 ;; Projectile Integration: The "Bridge" package.
 ;; -> Provides `projectile-persp-switch-project': switch to (or create) a

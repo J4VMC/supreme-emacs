@@ -386,7 +386,7 @@ Our keybindings act as a hybrid between classic Emacs bindings and modern IDE co
 | `C-x C-f` | Open a file               |
 | `C-x C-s` | Save current file         |
 | `C-x k`   | Close current file        |
-| `C-x b`   | Switch between open files |
+| `C-x b`   | Switch between open files (current workspace only) |
 | `C-x C-c` | Quit Emacs                |
 
 Quitting asks its questions ("save this file?") in the small area at the very bottom of the frame — answer with `y` or `n` there.
@@ -410,6 +410,10 @@ Quitting asks its questions ("save this file?") in the small area at the very bo
 `Command-p` (`s-p`) is the central "Command Palette" for project actions. Switching to a project opens it **VS Code-style**: the full file tree appears in the sidebar and the project folder in the main window — no file prompt.
 
 Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p` or by clicking it on the dashboard — creates its workspace (or re-enters it, restored exactly as you left it). The dashboard itself lives in the initial `main` workspace, so it's always there to come back to.
+
+The isolation runs through the whole config: `C-x b` lists only the current workspace's buffers (press `/ b` inside it to reach every buffer globally — handy for pulling a buffer over from another project), and the mode-line's bottom-right corner always shows which workspace you're in.
+
+**Workspaces survive restarts.** On quit, all workspaces are saved automatically; on the next launch they're restored — every project workspace comes back with its files and window layout, and you still land on the dashboard. Only file-visiting buffers are restored: terminals, sidebars, and other special buffers are recreated on demand. Starting Emacs with a file argument (`emacs file.txt`) skips the restore. Manual save/load: `C-c p C-s` / `C-c p C-l`.
 
 | Shortcut  | Action                                      |
 | --------- | ------------------------------------------- |
