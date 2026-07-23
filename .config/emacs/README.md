@@ -286,7 +286,7 @@ brew install hadolint terraform
 
 ---
 
-#### Document Formats (Markdown & XML)
+#### Document Formats (Markdown, XML & TOML)
 
 ```bash
 # Install Pandoc (for Markdown live-preview rendering)
@@ -294,6 +294,9 @@ brew install pandoc
 
 # Install libxml2 (provides xmllint for XML formatting)
 brew install libxml2
+
+# Install taplo (TOML formatter — auto-format on save for .toml files)
+brew install taplo
 ```
 
 ---
