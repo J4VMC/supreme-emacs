@@ -463,6 +463,15 @@
   :hook ((json-ts-mode . lsp-deferred)
          (json-ts-mode . apheleia-mode)))
 
+;; TOML: `toml-ts-mode` is BUILT INTO Emacs 29+. Without this mapping,
+;; `.toml` files fall back to the regex-based `conf-toml-mode` — the toml
+;; grammar is already in `treesit-auto-langs' (tree.el), so the ts mode
+;; just needed wiring up. Formatting runs through taplo (see dev.el).
+(use-package toml-ts-mode
+  :ensure nil ; Built-in
+  :mode ("\\.toml\\'" . toml-ts-mode)
+  :hook (toml-ts-mode . apheleia-mode))
+
 (use-package csv-mode
   :mode ("\\.csv\\'" . csv-mode)
   :bind (:map csv-mode-map

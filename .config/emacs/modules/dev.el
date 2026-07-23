@@ -135,6 +135,19 @@
   (setf (alist-get 'web-mode apheleia-mode-alist) 'prettier-html)
   (setf (alist-get 'yaml-mode apheleia-mode-alist) 'prettier-yaml)
   (setf (alist-get 'yaml-ts-mode apheleia-mode-alist) 'prettier-yaml)
+
+  ;; TOML (taplo — `brew install taplo`). NOT prettier: prettier has no
+  ;; native TOML support (only an unmaintained community plugin), and
+  ;; apheleia's other builtin choice for conf-toml-mode, dprint, refuses
+  ;; to run without a per-project dprint.json. taplo is the standard
+  ;; dedicated TOML formatter and works with zero config (reads an
+  ;; optional taplo.toml/.taplo.toml when present).
+  ;; -> toml-ts-mode -> taplo is already apheleia's builtin default;
+  ;;    kept explicit here like every other mapping in this list. The
+  ;;    conf-toml-mode entry OVERRIDES builtin dprint, as a fallback for
+  ;;    any toml buffer that ends up in the non-ts mode.
+  (setf (alist-get 'toml-ts-mode apheleia-mode-alist) 'taplo)
+  (setf (alist-get 'conf-toml-mode apheleia-mode-alist) 'taplo)
   (setf (alist-get 'markdown-mode apheleia-mode-alist) 'prettier-markdown)
   (setf (alist-get 'gfm-mode apheleia-mode-alist) 'prettier-markdown)
   (setf (alist-get 'svelte-mode apheleia-mode-alist) 'prettier-svelte)
