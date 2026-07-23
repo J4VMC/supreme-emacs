@@ -47,6 +47,7 @@
 (defvar lsp-metals-show-implicit-conversions-and-classes)
 (defvar lsp-metals-show-inferred-type)
 (defvar lsp-pyright-workspace-config)
+(defvar lsp-pyright-multi-root)
 (defvar lsp-rust-analyzer-cargo-watch-command)
 (defvar lsp-rust-analyzer-server-display-inlay-hints)
 (defvar lsp-rust-analyzer-display-lifetime-elision-hints-enable)
@@ -292,6 +293,22 @@
         (setq lsp-pyright-workspace-config
               `(:python.analysis.extraPaths [,project-root])))))
   :init
+  ;; ONE pyright per project, not one shared multi-root server.
+  ;; -> lsp-pyright registers its client as multi-root by default: every
+  ;;    python project gets FOLDED into a single server as an extra
+  ;;    workspace folder. With overlapping roots in the lsp session
+  ;;    (e.g. a monorepo root AND a sub-project inside it), a file under
+  ;;    both matches twice — "Received redundant open text document
+  ;;    command" warnings, doubled "Connected to pyright" messages, and
+  ;;    potentially duplicated diagnostics. Per-project servers also
+  ;;    keep each project's own .venv (pyvenv, languages.el) cleanly
+  ;;    separated.
+  ;; -> MUST be set before lsp-pyright loads: the flag is captured at
+  ;;    client registration, so flipping it later has no effect. After
+  ;;    changing this, stale sessions need `M-x lsp-workspace-remove-all-folders'
+  ;;    (or delete .lsp-session) once.
+  (setq lsp-pyright-multi-root nil)
+
   ;; Hook on `python-base-mode-hook`, which BOTH python-mode and
   ;; python-ts-mode run. The old hook was on `python-mode-hook`, which
   ;; python-ts-mode does NOT run — so the workspace paths were never set
