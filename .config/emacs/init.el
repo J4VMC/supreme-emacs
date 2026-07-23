@@ -82,7 +82,27 @@
          (brew-bin (expand-file-name "bin" brew-prefix)))
     (when (file-directory-p brew-bin)
       (add-to-list 'exec-path brew-bin)
-      (setenv "PATH" (concat brew-bin ":" (getenv "PATH"))))))
+      (setenv "PATH" (concat brew-bin ":" (getenv "PATH")))))
+
+  ;; Same reasoning for the version-manager toolchains, which live OUTSIDE
+  ;; the Homebrew prefix: node moved from Homebrew to nvm.fish
+  ;; (~/.local/share/nvm/) and python to pyenv (~/.pyenv/shims), with the
+  ;; pipx tools (basedpyright, black...) in ~/.local/bin. Anything that
+  ;; starts a language server BEFORE the idle-timer import — like buffers
+  ;; re-opened by the perspective state restore at startup — needs these
+  ;; on `exec-path' already, or lsp-mode reports the server as missing
+  ;; and tries (and fails) to auto-install it: "Unable to find a way to
+  ;; install vscode-json-languageserver".
+  (dolist (dir (append
+                ;; nvm: pick the NEWEST installed version if several
+                ;; exist. exec-path-from-shell later replaces this with
+                ;; the fish-configured default anyway.
+                (last (sort (file-expand-wildcards "~/.local/share/nvm/v*/bin") #'string<))
+                (list "~/.pyenv/shims" "~/.local/bin")))
+    (let ((dir (expand-file-name dir)))
+      (when (file-directory-p dir)
+        (add-to-list 'exec-path dir)
+        (setenv "PATH" (concat dir ":" (getenv "PATH")))))))
 
 ;; =============================================================================
 ;; NATIVE COMPILATION (macOS FIX)
