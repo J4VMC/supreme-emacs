@@ -583,9 +583,12 @@ the preview."
   (setq markdown-fontify-code-blocks-natively t)
   (setq markdown-command "pandoc")
 
-  ;; Shortcuts: C-c p (Start), C-c P (Stop).
-  (define-key markdown-mode-map (kbd "C-c p") #'jmc-markdown-preview-split)
-  (define-key markdown-mode-map (kbd "C-c P") #'jmc-markdown-preview-live-stop))
+  ;; Shortcuts: C-c v (View preview), C-c V (Stop).
+  ;; -> MOVED from C-c p / C-c P: perspective's global prefix (projects.el)
+  ;;    took over "C-c p", and minor-mode maps outrank major-mode maps, so
+  ;;    the old binding became unreachable in markdown buffers.
+  (define-key markdown-mode-map (kbd "C-c v") #'jmc-markdown-preview-split)
+  (define-key markdown-mode-map (kbd "C-c V") #'jmc-markdown-preview-live-stop))
 
 ;; =============================================================================
 ;; DEVOPS & ENVIRONMENTS (TERRAFORM, DOTENV)
