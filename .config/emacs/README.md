@@ -416,7 +416,7 @@ Every project also gets its **own workspace** (a "perspective"): its buffers, wi
 
 The isolation runs through the whole config: `C-x b` lists only the current workspace's buffers (press `/ b` inside it to reach every buffer globally — handy for pulling a buffer over from another project), and the mode-line's bottom-right corner always shows which workspace you're in.
 
-**Workspaces survive restarts.** On quit, all workspaces are saved automatically; on the next launch they're restored — every project workspace comes back with its files and window layout, and you still land on the dashboard. Only file-visiting buffers are restored: terminals, sidebars, and other special buffers are recreated on demand. Starting Emacs with a file argument (`emacs file.txt`) skips the restore. Manual save/load: `C-c p C-s` / `C-c p C-l`.
+**Workspaces survive restarts.** On quit, all project workspaces are saved automatically (the dashboard's `main` workspace is deliberately excluded, so it always starts clean); on the next launch they're restored — every project workspace comes back with its files and window layout, and you still land on the dashboard. The restore runs a moment *after* startup so it never delays the dashboard appearing. Only file-visiting buffers are restored: terminals, sidebars, and other special buffers are recreated on demand. Starting Emacs with a file argument (`emacs file.txt`) skips the restore. Manual save/load: `C-c p C-s` / `C-c p C-l`.
 
 | Shortcut  | Action                                      |
 | --------- | ------------------------------------------- |
