@@ -185,6 +185,14 @@
   ;; this one, so the path is set explicitly.)
   (setq persp-state-default-file
         (no-littering-expand-var-file-name "persp-state.el"))
+
+  ;; Keep the initial ("main") perspective OUT of the saved state: it is
+  ;; the dashboard's home, not a workspace. Without this, any buffer that
+  ;; drifted into main during a session was saved and re-opened on every
+  ;; subsequent launch, piling up next to the dashboard. The kill happens
+  ;; inside `persp-state-save' on the way out of Emacs, so nothing of
+  ;; value is lost — project buffers live in their project perspectives.
+  (setq persp-purge-initial-persp-on-save t)
   :config
   (persp-mode 1)
 
@@ -221,14 +229,24 @@ perspective and re-open the dashboard as the landing page."
         (error (message "Perspective restore failed: %s"
                         (error-message-string err))))))
 
-  ;; Restore AFTER Elpaca has processed every startup queue — the load
-  ;; visits saved files, whose major modes may live in packages that are
-  ;; still activating during init. Skipped when Emacs was started with a
-  ;; file argument (e.g. `emacs file.txt'), mirroring the dashboard's own
-  ;; initial-buffer guard in interface.el: in that case you asked for a
-  ;; specific file, not for your workspaces back.
+  ;; Restore on IDLE, not during startup. The load visits every saved
+  ;; file synchronously — major modes, tree-sitter, and lsp servers for
+  ;; each perspective's visible buffers — which, run from
+  ;; `elpaca-after-init-hook' directly, blocked the first paint for
+  ;; seconds ("emacs takes forever to start"). Scheduling from that hook
+  ;; onto an idle timer lets the dashboard render immediately; the
+  ;; workspaces materialize a moment later while you're still looking at
+  ;; it. (Same pattern as projectile's deferred project scan above.)
+  ;; Elpaca has processed every startup queue by scheduling time, so the
+  ;; packages the saved files' major modes need are all activated.
+  ;; Skipped when Emacs was started with a file argument (e.g.
+  ;; `emacs file.txt'), mirroring the dashboard's own initial-buffer
+  ;; guard in interface.el: in that case you asked for a specific file,
+  ;; not for your workspaces back.
   (unless (> (length command-line-args) 1)
-    (add-hook 'elpaca-after-init-hook #'jmc-persp-state-restore-h))
+    (add-hook 'elpaca-after-init-hook
+              (lambda ()
+                (run-with-idle-timer 1 nil #'jmc-persp-state-restore-h))))
 
   ;; Consult integration: scope `C-x b' to the current perspective.
   ;; -> Without this, `consult-buffer' lists EVERY buffer globally,
