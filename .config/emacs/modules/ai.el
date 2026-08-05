@@ -109,6 +109,13 @@
   (defun jmc-claude-code-ide-toggle-skip-permissions ()
     "Toggle --dangerously-skip-permissions for future `claude-code-ide' sessions."
     (interactive)
+    ;; The variable lives in a `defcustom' inside claude-code-ide.el, which
+    ;; is `:defer t'.  This command is defined in `:init' (so it exists at
+    ;; startup) and is bound to a key, but calling it does NOT autoload the
+    ;; package -- so without this `require' the var is still void the first
+    ;; time you toggle.  Loading it here also makes the flag take effect for
+    ;; the very next `claude-code-ide' session, which is the whole point.
+    (require 'claude-code-ide)
     (if (equal claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
         (progn
           (setq claude-code-ide-cli-extra-flags nil)
