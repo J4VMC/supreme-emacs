@@ -36,6 +36,7 @@
 ;; =============================================================================
 
 (defvar jmc-jump-map)
+(defvar claude-code-ide-cli-extra-flags)
 
 (declare-function claude-code-ide-emacs-tools-setup "claude-code-ide-emacs-tools")
 (declare-function agent-shell-google-make-authentication "agent-shell-google")
@@ -81,7 +82,9 @@
 	 ;; `C-c i l`: List and switch between active sessions (one per project).
 	 ("C-c i l" . claude-code-ide-list-sessions)
 	 ;; `C-c i t`: Toggle the most recent Claude window from anywhere.
-	 ("C-c i t" . claude-code-ide-toggle-recent))
+	 ("C-c i t" . claude-code-ide-toggle-recent)
+	 ;; `C-c i !`: Toggle --dangerously-skip-permissions for NEW sessions.
+	 ("C-c i !" . jmc-claude-code-ide-toggle-skip-permissions))
   :custom
   ;; Reuse the libghostty terminal you already run for claude-code.el.
   ;; -> If your checkout predates ghostel support and this symbol is
@@ -95,6 +98,23 @@
   ;; Match the ghostel drawer geometry from terminal.el (right side, half).
   (claude-code-ide-window-side 'right)
   (claude-code-ide-window-width 0.5)
+
+  :init
+  ;; DANGER, off by default: `--dangerously-skip-permissions' bypasses
+  ;; the CLI's own safety gate for file edits and shell commands — not
+  ;; just this Emacs front-end's ediff review step above. `C-c i !'
+  ;; flips it for sessions started AFTER the toggle; the CLI reads its
+  ;; flags once at process launch, so a session already running keeps
+  ;; whatever was set when it started.
+  (defun jmc-claude-code-ide-toggle-skip-permissions ()
+    "Toggle --dangerously-skip-permissions for future `claude-code-ide' sessions."
+    (interactive)
+    (if (equal claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
+        (progn
+          (setq claude-code-ide-cli-extra-flags nil)
+          (message "claude-code-ide: permission prompts RESTORED for new sessions"))
+      (setq claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
+      (message "claude-code-ide: permission prompts SKIPPED for new sessions — danger")))
 
   :config
   ;; Expose Emacs itself to the agent over MCP: xref/LSP navigation,

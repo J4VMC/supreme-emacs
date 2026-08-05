@@ -505,7 +505,10 @@ Three integrations are included: a quick Claude command interface (`C-c c`), a f
 | `C-c i c` | Continue the previous conversation              |
 | `C-c i r` | Resume an earlier session                       |
 | `C-c i l` | List active sessions                            |
+| `C-c i !` | Toggle `--dangerously-skip-permissions` (off by default) |
 | `C-c g`   | Start a Gemini agent session (agent-shell)      |
+
+`C-c i !` bypasses the CLI's own permission prompts for file edits and shell commands in every session started afterward — it does not affect a session already running, and does not disable the ediff review step. Off by default; the mode-line message confirms the current state whenever you toggle it.
 
 **How the Gemini session differs:** it's a plain Emacs buffer, not a terminal app — search, copy, and paste work like in any other buffer. The agent's proposed file edits appear as inline diffs with approve/deny prompts (Claude's `C-c i` sessions instead open a side-by-side ediff where you accept or reject individual hunks). Under the hood it speaks ACP, an open protocol — the same interface can drive Codex, Goose, and other agents if you ever want them.
 
