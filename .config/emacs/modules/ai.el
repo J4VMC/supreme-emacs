@@ -96,6 +96,13 @@
   (claude-code-ide-window-side 'right)
   (claude-code-ide-window-width 0.5)
 
+  ;; DANGER: skip every permission prompt (file edits, shell commands,
+  ;; everything) — the CLI's own safety gate, not just this Emacs
+  ;; front-end's ediff review step above. Scoped per-project via
+  ;; .envrc/.claude/settings.json is the safer alternative; this applies
+  ;; unconditionally to every `C-c i i` session.
+  (claude-code-ide-cli-extra-flags "--dangerously-skip-permissions")
+
   :config
   ;; Expose Emacs itself to the agent over MCP: xref/LSP navigation,
   ;; tree-sitter structure, project info, and buffer diagnostics.
