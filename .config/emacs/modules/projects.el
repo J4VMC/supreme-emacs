@@ -55,19 +55,12 @@
 (defvar projectile-known-projects)
 (defvar persp-mode-prefix-key)
 (defvar persp-modestring-short)
-(defvar persp-state-default-file)
-(defvar persp-initial-frame-name)
 (defvar persp-consult-source)
 (defvar consult-buffer-sources)
 (defvar consult--source-buffer)
 
 (declare-function dashboard-refresh-buffer "dashboard")
-(declare-function dashboard-open "dashboard")
-(declare-function no-littering-expand-var-file-name "no-littering")
 (declare-function persp-mode "perspective")
-(declare-function persp-state-save "perspective")
-(declare-function persp-state-load "perspective")
-(declare-function persp-switch "perspective")
 (declare-function projectile-mode "projectile")
 (declare-function treemacs-set-scope-type "treemacs-scope")
 (declare-function projectile-project-root "projectile")
@@ -178,75 +171,34 @@
   ;; default (full list of every open perspective) grows unbounded as
   ;; projects are opened; the current name is the only part that matters.
   (setq persp-modestring-short t)
-
-  ;; Where the saved workspace state lives. no-littering's var/ directory
-  ;; keeps it out of the config root; the file itself is a readable elisp
-  ;; form. (no-littering covers the unrelated `persp-mode' package, not
-  ;; this one, so the path is set explicitly.)
-  (setq persp-state-default-file
-        (no-littering-expand-var-file-name "persp-state.el"))
-
-  ;; Keep the initial ("main") perspective OUT of the saved state: it is
-  ;; the dashboard's home, not a workspace. Without this, any buffer that
-  ;; drifted into main during a session was saved and re-opened on every
-  ;; subsequent launch, piling up next to the dashboard. The kill happens
-  ;; inside `persp-state-save' on the way out of Emacs, so nothing of
-  ;; value is lost — project buffers live in their project perspectives.
-  (setq persp-purge-initial-persp-on-save t)
   :config
   (persp-mode 1)
 
-  ;; --- Workspace persistence across restarts ---
+  ;; --- NO workspace persistence across restarts (deliberate) ---
   ;;
-  ;; SAVE on every exit; RESTORE automatically on the next launch. Only
-  ;; FILE-visiting buffers survive the round trip — starred/special
-  ;; buffers (dashboard, terminals, Treemacs sidebars) are saved as
-  ;; placeholders and recreated on demand instead. Manual escape
-  ;; hatches remain on `C-c p C-s' (save) and `C-c p C-l' (load).
-
-  (defun jmc-persp-state-save-h ()
-    "Save perspective state on exit, never blocking Emacs from quitting."
-    (when (and (bound-and-true-p persp-mode) persp-state-default-file)
-      (condition-case err
-          (persp-state-save)
-        (error (message "Perspective save failed: %s"
-                        (error-message-string err))))))
-  (add-hook 'kill-emacs-hook #'jmc-persp-state-save-h)
-
-  (defun jmc-persp-state-restore-h ()
-    "Restore last session's workspaces, then land back on the dashboard.
-`persp-state-load' finishes in whichever perspective was iterated
-last, and the initial perspective's saved layout shows a placeholder
-where the dashboard buffer used to be — so switch back to the initial
-perspective and re-open the dashboard as the landing page."
-    (when (file-exists-p persp-state-default-file)
-      (condition-case err
-          (progn
-            (persp-state-load persp-state-default-file)
-            (persp-switch persp-initial-frame-name)
-            (when (fboundp 'dashboard-open)
-              (dashboard-open)))
-        (error (message "Perspective restore failed: %s"
-                        (error-message-string err))))))
-
-  ;; Restore on IDLE, not during startup. The load visits every saved
-  ;; file synchronously — major modes, tree-sitter, and lsp servers for
-  ;; each perspective's visible buffers — which, run from
-  ;; `elpaca-after-init-hook' directly, blocked the first paint for
-  ;; seconds ("emacs takes forever to start"). Scheduling from that hook
-  ;; onto an idle timer lets the dashboard render immediately; the
-  ;; workspaces materialize a moment later while you're still looking at
-  ;; it. (Same pattern as projectile's deferred project scan above.)
-  ;; Elpaca has processed every startup queue by scheduling time, so the
-  ;; packages the saved files' major modes need are all activated.
-  ;; Skipped when Emacs was started with a file argument (e.g.
-  ;; `emacs file.txt'), mirroring the dashboard's own initial-buffer
-  ;; guard in interface.el: in that case you asked for a specific file,
-  ;; not for your workspaces back.
-  (unless (> (length command-line-args) 1)
-    (add-hook 'elpaca-after-init-hook
-              (lambda ()
-                (run-with-idle-timer 1 nil #'jmc-persp-state-restore-h))))
+  ;; Perspectives are SESSION-scoped: they are built as you open projects
+  ;; (`s-p p' / the dashboard) and die with Emacs. Nothing is saved on
+  ;; exit and nothing is restored on launch.
+  ;;
+  ;; This config used to save `persp-state-default-file' from
+  ;; `kill-emacs-hook' and reload it from an idle timer after
+  ;; `elpaca-after-init-hook'. Both halves were removed:
+  ;; -> STARTUP COST: restoring visits every saved file synchronously —
+  ;;    major modes, tree-sitter grammars, and an lsp server per
+  ;;    project — so a few days of accumulated workspaces turned into
+  ;;    seconds of jank right after the dashboard painted. Deferring it
+  ;;    to an idle timer moved the stall, it did not remove it.
+  ;; -> CORRECTNESS: the restored state was routinely wrong — buffers
+  ;;    whose files had moved or been deleted, Treemacs/terminal
+  ;;    placeholders that never came back properly, and perspectives
+  ;;    landing in a half-built layout that had to be killed by hand.
+  ;;
+  ;; Re-opening a project takes one `s-p p', which rebuilds the
+  ;; perspective correctly and only for the project actually wanted.
+  ;; `persp-state-save'/`persp-state-load' still exist as interactive
+  ;; commands (`C-c p C-s' / `C-c p C-l') for anyone who wants a
+  ;; one-off snapshot; they just prompt for a file instead of using a
+  ;; default one wired into startup.
 
   ;; Consult integration: scope `C-x b' to the current perspective.
   ;; -> Without this, `consult-buffer' lists EVERY buffer globally,
