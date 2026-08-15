@@ -168,6 +168,8 @@
   (supreme-brackets-setup-extended-keybindings))
 
 ;; --- Indentation Guides ---
+;; Bar colors follow `jmc-theme' (see init.el): Gruvbox Bright vs
+;; Catppuccin Mocha accents, same seven-color rainbow order.
 (use-package indent-bars
   :hook (prog-mode . indent-bars-mode)
   :custom
@@ -175,15 +177,23 @@
   (indent-bars-prefer-character t)
   (indent-bars-no-stipple-char ?│)
 
-  ;; 2. Inactive bars: Gruvbox 'bg3' (Gray)
-  (indent-bars-color '(highlight :face-bg nil :color "#665c54" :blend 1.0))
+  ;; 2. Inactive bars: the theme's muted gray (Gruvbox bg3 / Catppuccin surface1)
+  (indent-bars-color
+   (if (eq jmc-theme 'catppuccin)
+       '(highlight :face-bg nil :color "#45475a" :blend 1.0)
+     '(highlight :face-bg nil :color "#665c54" :blend 1.0)))
 
-  ;; 3. Depth colors: Gruvbox Bright (Red, Orange, Yellow, Green, Aqua, Blue, Purple)
+  ;; 3. Depth colors: Red, Orange/Peach, Yellow, Green, Aqua/Teal, Blue, Purple/Mauve
   (indent-bars-color-by-depth
-   '(:palette ("#fb4934" "#fe8019" "#fabd2f" "#b8bb26" "#8ec07c" "#83a598" "#d3869b") :blend 1.0))
+   (if (eq jmc-theme 'catppuccin)
+       '(:palette ("#f38ba8" "#fab387" "#f9e2af" "#a6e3a1" "#94e2d5" "#89b4fa" "#cba6f7") :blend 1.0)
+     '(:palette ("#fb4934" "#fe8019" "#fabd2f" "#b8bb26" "#8ec07c" "#83a598" "#d3869b") :blend 1.0)))
 
-  ;; 4. Current depth: Gruvbox Bright Yellow (stands out beautifully)
-  (indent-bars-highlight-current-depth '(:color "#fabd2f" :blend 1.0))
+  ;; 4. Current depth: the theme's bright yellow (stands out beautifully)
+  (indent-bars-highlight-current-depth
+   (if (eq jmc-theme 'catppuccin)
+       '(:color "#f9e2af" :blend 1.0)
+     '(:color "#fabd2f" :blend 1.0)))
 
   :config
   (require 'indent-bars-ts)

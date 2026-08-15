@@ -64,16 +64,23 @@ mv ~/.config/emacs ~/.config/emacs.backup
 mv ~/.emacs.d ~/.emacs.d.backup
 ```
 
-Clone and set up this configuration with the Gruvbox Dark Hard theme:
+Clone and set up this configuration:
 
 ```bash
 git clone git@github.com:J4VMC/supreme-emacs.git ~/.config/emacs
 ```
 
-> An older snapshot of this configuration with a Catppuccin Mocha theme
-> exists on the `catppuccin` branch of the (unmaintained) predecessor repo,
-> [`J4VMC/emacs-modular`](https://github.com/J4VMC/emacs-modular) — it
-> predates many of the fixes and features documented here.
+The default theme is **Gruvbox Dark Hard**. To use **Catppuccin Mocha** on a
+given machine instead, opt in via `local.el` — an untracked, git-ignored file
+next to `init.el` (the same pattern as `custom.el`):
+
+```bash
+echo "(setq jmc-theme 'catppuccin)" > ~/.config/emacs/local.el
+```
+
+Both themes are installed on every machine, so `M-x load-theme` can switch
+interactively at any time; `local.el` only controls which theme activates at
+startup (and matches the indent-guide colors to it).
 
 ### Step 4: Install Core Tools (Required for Everyone)
 
