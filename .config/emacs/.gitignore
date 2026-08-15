@@ -24,6 +24,7 @@ straight
 .projectile
 list-packages
 custom.el
+local.el
 .DS_STORE
 **/\#*\#
 .dap-breakpoints

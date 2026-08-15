@@ -381,12 +381,31 @@ After updating and verifying everything works, run
   (diminish 'auto-revert-mode)   ; " ARev"
   (diminish 'cua-mode))          ; " CUA"
 
-;; Install and apply the Gruvbox theme.
+;; --- Theme (per-machine) ---
+;; `jmc-theme' selects the theme for THIS machine. The default lives here;
+;; individual machines override it in `local.el` (untracked, like
+;; `custom.el`) with e.g.: (setq jmc-theme 'catppuccin)
+(defvar jmc-theme 'gruvbox-dark-hard
+  "Theme to activate on this machine.  Override in local.el.")
+
+;; Machine-local overrides. Loaded here — before the theme blocks below —
+;; so it can set `jmc-theme' in time.
+(load (expand-file-name "local.el" user-emacs-directory) 'noerror)
+
+;; Both themes install on every machine; only the selected one activates.
+;; -> `load-theme' stays in `:init' so the default UI never flashes before
+;;    the theme applies, and per-package activation works with Elpaca's
+;;    async install queue on a fresh clone.
 (use-package gruvbox-theme
   :init
-  ;; Load the theme during the `:init` phase (before the package fully loads).
-  ;; -> Prevents the default UI from flashing before the theme applies.
-  (load-theme 'gruvbox-dark-hard t))
+  (when (eq jmc-theme 'gruvbox-dark-hard)
+    (load-theme 'gruvbox-dark-hard t)))
+
+(use-package catppuccin-theme
+  :init
+  (setq catppuccin-flavor 'mocha)  ; explicit, though mocha is upstream's default
+  (when (eq jmc-theme 'catppuccin)
+    (load-theme 'catppuccin t)))
 
 ;; =============================================================================
 ;; CUSTOMIZATION FILE
