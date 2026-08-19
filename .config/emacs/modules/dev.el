@@ -55,6 +55,12 @@
 (use-package magit-todos
   :after magit
   :config
+  ;; rg skips hidden files by default, so a repo whose tracked content is
+  ;; all dot-paths (e.g. an MTA-STS repo holding only .well-known/mta-sts.txt)
+  ;; gives it zero files to search and it dies with exit code 2 ("No files
+  ;; were searched"). `.git/' is already excluded via
+  ;; `magit-todos-exclude-globs', so --hidden alone is safe.
+  (setq magit-todos-rg-extra-args '("--hidden"))
   (magit-todos-mode 1))
 
 ;; =============================================================================
