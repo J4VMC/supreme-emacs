@@ -16,7 +16,7 @@ A modern, IDE-like Emacs configuration for software development. This setup prov
 - **Spell Checking**: Context-aware — checks prose in text files, but only comments and strings in code (jinx)
 - **Persistent Undo**: Undo history survives restarting Emacs, with a visual undo tree (undo-fu + vundo)
 - **Integrated Terminal**: Fast pop-up terminal drawer (ghostel, powered by libghostty)
-- **Consistent Icons**: One icon set (nerd-icons) across the dashboard, sidebar, file manager, and completion popups
+- **Consistent Icons**: One icon set (nerd-icons) across the welcome screen, sidebar, file manager, and completion popups
 - **Support for Multiple Languages**: Python, JavaScript/TypeScript, Go, Rust, PHP, Java, Swift, Scala, Shell, SQL, Docker, Terraform, and more
 
 ## Prerequisites
@@ -336,7 +336,7 @@ emacs
 **What happens on first launch:**
 
 1. Emacs will automatically download and install packages (takes 2-5 minutes).
-2. You'll see a dashboard with recent files and projects.
+2. You'll land on a welcome screen listing your recent files and projects. Everything on it is keyboard-driven: move between items with `TAB` / `S-TAB` or the arrow keys and press `RET` to open (the mouse works too), or use the action keys — `f` find a file, `r` search all recent files, `p` open any project, `e` open this configuration as a project. `d` forgets the item under point (removes it from the list — nothing on disk; forgotten projects also stay out of auto-discovery). Wherever you are, `s-p h` brings the screen back.
 3. Emacs may ask to update packages (answer `y` or `n`).
 4. When you open a code file for a language whose syntax grammar isn't installed yet, Emacs **asks permission** to install it. Answer `y` — it takes a few seconds, once per language.
     - Prefer to get it all over with at once? Run `M-x treesit-auto-install-all` and grab a coffee.
@@ -419,11 +419,11 @@ Quitting asks its questions ("save this file?") in the small area at the very bo
 
 `Command-p` (`s-p`) is the central "Command Palette" for project actions. Switching to a project opens it **VS Code-style**: the full file tree appears in the sidebar and the project folder in the main window — no file prompt.
 
-Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p` or by clicking it on the dashboard — creates its workspace (or re-enters it, restored exactly as you left it). The dashboard itself lives in the initial `main` workspace, so it's always there to come back to.
+Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p`, or from the welcome screen by `RET` / click — creates its workspace (or re-enters it, restored exactly as you left it). The welcome screen itself lives in the initial `main` workspace, so it's always there to come back to (`s-p h` jumps straight to it).
 
 The isolation runs through the whole config: `C-x b` lists only the current workspace's buffers (press `/ b` inside it to reach every buffer globally — handy for pulling a buffer over from another project), and the mode-line's bottom-right corner always shows which workspace you're in.
 
-**Workspaces survive restarts.** On quit, all project workspaces are saved automatically (the dashboard's `main` workspace is deliberately excluded, so it always starts clean); on the next launch they're restored — every project workspace comes back with its files and window layout, and you still land on the dashboard. The restore runs a moment *after* startup so it never delays the dashboard appearing. Only file-visiting buffers are restored: terminals, sidebars, and other special buffers are recreated on demand. Starting Emacs with a file argument (`emacs file.txt`) skips the restore. Manual save/load: `C-c p C-s` / `C-c p C-l`.
+**Workspaces are session-scoped** (deliberately): they're built as you open projects and die with Emacs — nothing is saved on quit or restored on launch. Automatic restore was removed because it visited every saved file synchronously (startup jank) and routinely resurrected stale, half-broken layouts; re-opening a project is one `s-p p` (or one keypress on the welcome screen). For a one-off snapshot, `C-c p C-s` / `C-c p C-l` still save/load workspace state to a file of your choice.
 
 | Shortcut  | Action                                      |
 | --------- | ------------------------------------------- |
@@ -435,6 +435,7 @@ The isolation runs through the whole config: `C-x b` lists only the current work
 | `s-p r`   | Toggle the project terminal                 |
 | `s-p c`   | Compile / Build project                     |
 | `s-p A`   | Launch the AI agent for the current project |
+| `s-p h`   | Back to the welcome screen                  |
 | `s-0`     | Move cursor focus to the file tree          |
 | `C-c t d` | Manually add a folder to the sidebar        |
 

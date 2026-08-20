@@ -9,8 +9,10 @@
 ;; 1. Font configuration (including Nerd Font icons and ligatures).
 ;; 2. Core UI improvements (transparency, scrolling, tabs).
 ;; 3. Icon packages for files, completions, and 'Dired'.
-;; 4. A graphical dashboard (welcome screen).
-;; 5. Enhanced mode-line and help system.
+;; 4. Enhanced mode-line and help system.
+;;
+;; NOTE: the startup screen lives in its own module now (welcome.el) —
+;; the `dashboard' package it replaced used to be configured here.
 ;;
 ;;; Code:
 
@@ -20,17 +22,11 @@
 
 (defvar display-time-format)
 (defvar display-time-interval)
-(defvar dashboard-projects-switch-function)
 (defvar corfu-margin-formatters)
 (defvar dimmer-buffer-exclusion-regexps)
 
 (declare-function ligature-set-ligatures "ligature")
 (declare-function global-ligature-mode "ligature")
-(declare-function dashboard-setup-startup-hook "dashboard")
-(declare-function dashboard-open "dashboard")
-(declare-function dashboard-modify-heading-icons "dashboard")
-(declare-function dashboard-icon-for-dir "dashboard")
-(declare-function dashboard-icon-for-file "dashboard")
 (declare-function global-colorful-mode "colorful-mode")
 (declare-function dimmer-mode "dimmer")
 (declare-function dimmer-configure-which-key "dimmer")
@@ -365,8 +361,8 @@
 ;; distinguish file types, completion candidates, and UI elements.
 
 ;; Core icon package: nerd-icons is THE single icon backend for this config
-;; — dashboard, dirvish, minibuffer completion, corfu, and treemacs all
-;; render from it. (all-the-icons and kind-icon are fully retired.)
+;; — the welcome screen, dirvish, minibuffer completion, corfu, and treemacs
+;; all render from it. (all-the-icons and kind-icon are fully retired.)
 ;;
 ;; FONT REQUIREMENT: every glyph requests the family "Symbols Nerd Font
 ;; Mono" (nerd-icons' hardcoded default). If that font is missing, Emacs
@@ -403,193 +399,6 @@
   :after (corfu nerd-icons)
   :config
   (add-to-list 'corfu-margin-formatters #'nerd-icons-corfu-formatter))
-
-;; =============================================================================
-;; DASHBOARD (STARTUP SCREEN)
-;; =============================================================================
-;; The dashboard replaces the default *scratch* buffer with a modern,
-;; graphical welcome screen showing recent files and projects.
-
-(use-package dashboard
-
-  :init
-  ;; Activate the dashboard natively during the startup sequence.
-  ;; -> This blocks the screen from drawing until the dashboard is fully ready,
-  ;;    preventing the ugly 0.5s flash of the *scratch* buffer.
-  (dashboard-setup-startup-hook)
-
-  ;; Make dashboard the default initial buffer.
-  ;; -> Unless Emacs was started with a file argument (e.g., `emacs file.txt`).
-  (unless (> (length command-line-args) 1)
-    (setq initial-buffer-choice #'dashboard-open))
-
-  :custom
-  ;; Define the layout order.
-  ;; -> Banner (logo) first, then items list.
-  (dashboard-startupify-list '(dashboard-insert-banner
-                               dashboard-insert-newline
-                               dashboard-insert-items))
-
-  ;; Use the built-in Emacs logo.
-  (dashboard-startup-banner 'logo)
-
-  ;; Center content both horizontally and vertically.
-  ;; -> Creates a balanced, visually appealing layout.
-  (dashboard-center-content t)
-  (dashboard-vertically-center-content t)
-
-  ;; Enable icons for section headings and files.
-  (dashboard-set-heading-icons t)
-  (dashboard-set-file-icons t)
-
-  ;; PIN the icon backend explicitly. Dashboard AUTO-DETECTS its backend,
-  ;; preferring nerd-icons over all-the-icons when both are installed —
-  ;; so merely installing nerd-icons (for dirvish, explorer.el) silently
-  ;; flipped the dashboard's backend and broke the all-the-icons heading
-  ;; name below. Pinning makes the choice deterministic; the heading icon
-  ;; name in :config matches this backend.
-  (dashboard-icon-type 'nerd-icons)
-
-  ;; Use Projectile for project discovery.
-  (dashboard-projects-backend 'projectile)
-
-  ;; Show 5 recent files and 5 recent projects.
-  (dashboard-items '((recents . 5)
-                     (projects . 5)))
-
-  ;; Hide default footer and shortcuts.
-  (dashboard-show-shortcuts nil)
-  (dashboard-set-footer nil)
-
-  :config
-  ;; Customize the icon for the "Projects" section.
-  ;; -> "nf-oct-file_directory" is the NERD-ICONS octicon name, matching
-  ;;    the pinned `dashboard-icon-type' above. (The old "file-directory"
-  ;;    was the all-the-icons spelling — invalid under nerd-icons.)
-  (dashboard-modify-heading-icons '((projects . "nf-oct-file_directory")))
-
-  ;; Clean up the *scratch* buffer after dashboard loads.
-  ;; -> Since we're using dashboard, we don't need *scratch* anymore.
-  (add-hook 'dashboard-after-initialize-hook
-            (lambda ()
-              (when (get-buffer "*scratch*")
-                (kill-buffer "*scratch*")))))
-
-;; -----------------------------------------------------------------------------
-;; Dashboard Customizations
-;; -----------------------------------------------------------------------------
-
-;; Hide the cursor in the dashboard buffer.
-;; -> The dashboard is non-interactive, so a visible cursor is unnecessary.
-(defun jmc-dashboard-hide-cursor-h ()
-  "Hide the cursor in the dashboard buffer."
-  (setq-local cursor-type nil)
-  (setq-local blink-cursor-mode nil))
-
-(add-hook 'dashboard-mode-hook #'jmc-dashboard-hide-cursor-h)
-
-;; Create a "lockdown" mode to make the dashboard completely static.
-;; -> Disables all scrolling and movement keys.
-;; -> Prevents accidental navigation that would break the centered layout.
-
-;; Define a keymap that disables all movement commands.
-(defvar dashboard-lock-keymap
-  (let ((map (make-sparse-keymap)))
-    ;; Disable arrow key navigation.
-    (define-key map (kbd "<up>") 'ignore)
-    (define-key map (kbd "<down>") 'ignore)
-    (define-key map (kbd "<left>") 'ignore)
-    (define-key map (kbd "<right>") 'ignore)
-    ;; Disable page up/down.
-    (define-key map (kbd "<prior>") 'ignore)
-    (define-key map (kbd "<next>") 'ignore)
-    ;; Disable Emacs scroll commands.
-    (define-key map (kbd "C-v") 'ignore)
-    (define-key map (kbd "M-v") 'ignore)
-    ;; Disable mouse wheel scrolling.
-    (define-key map (kbd "<wheel-up>") 'ignore)
-    (define-key map (kbd "<wheel-down>") 'ignore)
-    ;; Disable horizontal scrolling.
-    (define-key map (kbd "<wheel-left>") 'ignore)
-    (define-key map (kbd "<wheel-right>") 'ignore)
-    ;; Disable jump-to-beginning/end commands.
-    (define-key map (kbd "M-<") 'ignore)
-    (define-key map (kbd "M->") 'ignore)
-    map)
-  "Keymap that disables all scrolling and navigation for the dashboard.")
-
-;; Package the keymap into a toggleable minor mode.
-(define-minor-mode dashboard-lock-mode
-  "Lock the dashboard view by disabling all movement and scrolling."
-  :init-value nil
-  :lighter " Lock"
-  :keymap dashboard-lock-keymap)
-
-;; Setup function to initialize the locked dashboard state.
-(defun setup-dashboard-lock ()
-  "Configure window properties and activate dashboard lock mode."
-  ;; Hide scroll bars.
-  (set-window-scroll-bars (selected-window) nil nil)
-  ;; Reset horizontal scroll position.
-  (set-window-hscroll (selected-window) 0)
-  ;; Prevent line wrapping.
-  (setq-local truncate-lines t)
-  ;; Activate the lock mode.
-  (dashboard-lock-mode 1))
-
-;; Activate the dashboard lock when dashboard-mode starts.
-(add-hook 'dashboard-mode-hook #'setup-dashboard-lock)
-
-;; Open dashboard projects through persp-projectile (projects.el): clicking
-;; a project creates (or re-enters) a perspective named after it, then runs
-;; the normal VS Code-style switch action inside that perspective. The
-;; dashboard itself stays behind in the initial "main" perspective.
-;; -> Just a symbol here — resolved when clicked, by which point
-;;    persp-projectile's autoloads are in place.
-(setq dashboard-projects-switch-function 'projectile-persp-switch-project)
-
-;; -----------------------------------------------------------------------------
-;; Smarter Per-Project Icons
-;; -----------------------------------------------------------------------------
-;; By default, the icon backend's icon-for-dir function picks a project's
-;; icon by matching patterns against the DIRECTORY NAME (nerd-icons and
-;; all-the-icons both behave this way),
-;; not by looking at what's actually inside it. Any project whose name
-;; contains "test" (e.g. "rust-test", "php-test") matches the same generic
-;; "test-dir" rule and gets an identical icon regardless of language.
-;; -> Look for a well-known marker file instead, and borrow the (language-
-;;    aware) file icon for that marker so the icon actually reflects the
-;;    project's tech stack.
-
-(defvar jmc-dashboard-project-marker-files
-  '("Cargo.toml" "go.mod" "package.json" "composer.json" "Gemfile"
-    "pyproject.toml" "requirements.txt" "Pipfile" "setup.py"
-    "pom.xml" "build.gradle" "mix.exs" "Package.swift" "CMakeLists.txt")
-  "Marker files checked, in order, to guess a project's language for icons.")
-
-(defvar jmc-dashboard-project-marker-extensions
-  '("\\.rs\\'" "\\.go\\'" "\\.py\\'" "\\.rb\\'" "\\.php\\'" "\\.sql\\'")
-  "Fallback file-extension patterns for projects without a manifest file.
-Only the project's top-level directory is scanned, to avoid recursing into
-directories like `node_modules'.")
-
-(defun jmc-dashboard-icon-for-project (orig-fn dir &rest args)
-  "Prefer a language-specific icon for DIR based on marker files.
-Falls back to calling ORIG-FN (`dashboard-icon-for-dir') with DIR and ARGS
-when nothing recognizable is found."
-  (let* ((exact (and (file-directory-p dir)
-                     (seq-find (lambda (f) (file-exists-p (expand-file-name f dir)))
-                               jmc-dashboard-project-marker-files)))
-         (by-ext (and (not exact) (file-directory-p dir)
-                      (seq-find (lambda (re) (directory-files dir nil re t))
-				jmc-dashboard-project-marker-extensions)))
-         (sample (and by-ext (car (directory-files dir nil by-ext t)))))
-    (cond
-     (exact (apply #'dashboard-icon-for-file exact args))
-     (sample (apply #'dashboard-icon-for-file sample args))
-     (t (apply orig-fn dir args)))))
-
-(advice-add 'dashboard-icon-for-dir :around #'jmc-dashboard-icon-for-project)
 
 ;; =============================================================================
 ;; MODE-LINE AND HELP SYSTEM
