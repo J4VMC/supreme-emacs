@@ -313,16 +313,33 @@ When PROJECT would be re-discovered automatically, also blocklist it in
       (jmc-welcome--render)
       (message "Forgot project %s (nothing deleted on disk)" project))))
 
+(defun jmc-welcome--button-here ()
+  "Return the button at point, or failing that the one on point's line.
+Point can legitimately sit NEXT TO the intended item — a mouse click in
+the row's left padding, say — so commands aimed at \"the item here\"
+tolerate the whole line."
+  (or (button-at (point))
+      (when-let* ((button (next-button (line-beginning-position) t)))
+        (and (<= (button-start button) (line-end-position))
+             button))))
+
 (defun jmc-welcome-forget-item ()
-  "Forget the list item under point (action key: d).
+  "Forget the list item on the current line (action key: d).
 Recent files leave recentf; projects leave projectile's known list (and
 its auto-discovery, when applicable). Nothing is deleted on disk."
   (interactive)
-  (let* ((button (button-at (point)))
+  (let* ((button (jmc-welcome--button-here))
          (forget-fn (and button (button-get button 'jmc-welcome-forget-fn))))
     (if forget-fn
         (funcall forget-fn)
-      (user-error "No forgettable item at point"))))
+      (user-error "No forgettable item here — move onto a recent file or project (TAB)"))))
+
+(defun jmc-welcome-activate ()
+  "Activate the button at point, or the one on the current line."
+  (interactive)
+  (if-let* ((button (jmc-welcome--button-here)))
+      (button-activate button)
+    (user-error "No item here — TAB moves between items")))
 
 (defun jmc-welcome-find-file ()
   "Prompt for a file to open (action key: f)."
@@ -574,7 +591,16 @@ as the buffer IS shown)."
                  ?\n))
 
         (setq jmc-welcome--last-dims (cons width height))
-        (goto-char (or jmc-welcome--first-item (point-min)))))
+        (goto-char (or jmc-welcome--first-item (point-min)))
+        ;; Sync WINDOW points too. Re-renders can happen while the
+        ;; buffer is displayed in a NON-selected window (the
+        ;; projectile-load refresh, the idle re-scan), and `goto-char'
+        ;; moves only the BUFFER point — each window's own point was
+        ;; left stranded in the top padding after `erase-buffer', where
+        ;; the hidden cursor made the lost focus invisible and d/RET
+        ;; found no button ("No forgettable item at point").
+        (dolist (window (get-buffer-window-list buffer nil t))
+          (set-window-point window (point)))))
     buffer))
 
 ;; =============================================================================
@@ -595,9 +621,10 @@ as the buffer IS shown)."
     (define-key map (kbd "<left>")    #'jmc-welcome-previous-button)
     (define-key map [remap next-line]     #'jmc-welcome-next-button)
     (define-key map [remap previous-line] #'jmc-welcome-previous-button)
-    ;; RET works even if point somehow leaves a button (buttons also
-    ;; carry their own RET via the standard button keymap).
-    (define-key map (kbd "RET") #'push-button)
+    ;; RET activates the item on the current line, tolerating point
+    ;; sitting beside the button (buttons also carry their own RET via
+    ;; the standard button keymap for the exactly-on-button case).
+    (define-key map (kbd "RET") #'jmc-welcome-activate)
     ;; Quick actions.
     (define-key map (kbd "f") #'jmc-welcome-find-file)
     (define-key map (kbd "r") #'jmc-welcome-recent-files)
