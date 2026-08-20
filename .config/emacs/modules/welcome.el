@@ -13,7 +13,11 @@
 ;; Rather than fight the package's rendering pipeline, this module draws
 ;; the whole screen itself (~an insert loop) and gets to be keyboard-first
 ;; by construction. No lock mode: movement keys are BOUND TO item
-;; navigation instead of disabled.
+;; navigation instead of disabled. What IS locked, deliberately, is
+;; SCROLLING — the layout centers itself against the window, so any
+;; scroll (wheel, trackpad, SPC/C-v, scroll-bar drag) only breaks it.
+;; Scroll commands are remapped away and a window hook snaps back
+;; anything that slips through; see the "Scroll lock" sections below.
 ;;
 ;; The screen:
 ;;   * ASCII banner + a footer with package count / startup time.
@@ -22,11 +26,15 @@
 ;;       Projects     - projectile-known-projects, newest first.
 ;;   * Every item is a real button: TAB / S-TAB / arrows / C-n / C-p move
 ;;     between them, RET (or mouse-1) opens.
+;;   * `d' and RET target the MOUSE-HOVERED row when there is one (the
+;;     row lit under the pointer is what "this one" means), and the
+;;     keyboard-focused row otherwise — which is why the keyboard focus
+;;     highlight is BOLD, so the two can be told apart.
 ;;   * Action keys: f find-file, r recent files (consult), p switch
 ;;     project, e open this config's project. `g' re-renders (standard
-;;     special-mode revert), `q' buries the buffer. `d' FORGETS the item
-;;     under point — list bookkeeping only, nothing is touched on disk;
-;;     see `jmc-welcome-forget-item' for the auto-discovery caveats.
+;;     special-mode revert), `q' buries the buffer. `d' FORGETS the
+;;     targeted item — list bookkeeping only, nothing is touched on
+;;     disk; see `jmc-welcome-forget-item' for auto-discovery caveats.
 ;;   * Projects open through `projectile-persp-switch-project', exactly
 ;;     like `s-p p' — each lands in its own perspective (projects.el).
 ;;
@@ -61,6 +69,8 @@
 (declare-function nerd-icons-icon-for-dir "nerd-icons")
 (declare-function nerd-icons-octicon "nerd-icons")
 (declare-function elpaca--queued "elpaca")
+(declare-function color-name-to-rgb "color")
+(declare-function color-rgb-to-hsl "color")
 
 ;; =============================================================================
 ;; FACES & OPTIONS
@@ -95,8 +105,11 @@
   "Face for de-emphasized text: paths, hints, the footer.")
 
 (defface jmc-welcome-focus-face
-  '((t :inherit highlight))
-  "Face for the item under point (applied via `cursor-face').")
+  '((t :inherit highlight :weight bold))
+  "Face for the KEYBOARD-focused item (applied via `cursor-face').
+Bold on purpose: mouse hover paints rows with the plain `highlight'
+mouse-face, and the two targets must be tellable apart — `d'/RET act on
+the hovered row when the mouse is over one, else on this one.")
 
 (defvar jmc-welcome-recents-count 5
   "How many recent files to list.")
@@ -123,6 +136,59 @@ Box-drawing + block glyphs only, so it renders in the terminal too.")
 
 (defconst jmc-welcome--subtitle "· s u p r e m e ·"
   "Small tag line under the banner (nod to the repo name).")
+
+(defconst jmc-welcome--kitten
+  '("       "
+    "       "
+    "       "
+    " /\\_/\\ "
+    "( o.o )"
+    " > ^ < ")
+  "Resident orange tabby, one row per banner row.
+Bottom-aligned so it sits on the banner's shadow line. All rows are 7
+columns wide — keep them that way or the centering math drifts.")
+
+(defface jmc-welcome-kitten-face
+  '((t :weight bold :foreground "#fe8019"))
+  "Face for the banner kitten.
+A tabby has to be ORANGE, so this is the one welcome face that cannot
+just inherit a font-lock face (nothing is orange in every theme).
+`jmc-welcome--retint-kitten' re-derives the exact orange from the
+active theme; the spec here is only the pre-theme fallback.")
+
+(defun jmc-welcome--kitten-color ()
+  "Return the active theme's best orange.
+Scores warm candidate faces by hue distance to tabby-orange (25 deg),
+skipping washed-out colors; falls back to stock #fe8019 when the theme
+offers nothing warm. gruvbox lands on its bright orange (builtin face),
+catppuccin on peach (constant face)."
+  (require 'color)
+  (let ((best nil)
+        (best-dist 41)) ; only accept hues within 40 deg of orange
+    (dolist (face '(font-lock-builtin-face font-lock-constant-face
+                    warning font-lock-keyword-face font-lock-string-face))
+      (let* ((color (face-attribute face :foreground nil t))
+             (rgb (and (stringp color) (color-name-to-rgb color))))
+        (when rgb
+          (pcase-let* ((`(,h ,s ,_l) (apply #'color-rgb-to-hsl rgb))
+                       (hue (* h 360.0))
+                       (dist (min (abs (- hue 25)) (- 360 (abs (- hue 25))))))
+            (when (and (>= s 0.3) (< dist best-dist))
+              (setq best color
+                    best-dist dist))))))
+    (or best "#fe8019")))
+
+(defun jmc-welcome--retint-kitten (&rest _)
+  "Point `jmc-welcome-kitten-face' at the active theme's orange.
+Runs at load and from `enable-theme-functions' — at module-load time
+the theme usually is not active yet (Elpaca installs it asynchronously),
+so the load-time call may see default faces and keep the fallback; the
+theme's own enable then corrects it."
+  (set-face-attribute 'jmc-welcome-kitten-face nil
+                      :foreground (jmc-welcome--kitten-color)))
+
+(jmc-welcome--retint-kitten)
+(add-hook 'enable-theme-functions #'jmc-welcome--retint-kitten)
 
 ;; =============================================================================
 ;; BUFFER-LOCAL RENDER STATE
@@ -309,16 +375,56 @@ When PROJECT would be re-discovered automatically, also blocklist it in
       (jmc-welcome--render)
       (message "Forgot project %s (nothing deleted on disk)" project))))
 
+(defun jmc-welcome--button-on-line (pos)
+  "Return the button at POS, or failing that the one on POS's line.
+POS can legitimately sit NEXT TO the intended item — in the row's left
+padding, say — so item lookups tolerate the whole line."
+  (or (button-at pos)
+      (save-excursion
+        (goto-char pos)
+        (when-let* ((button (next-button (line-beginning-position) t)))
+          (and (<= (button-start button) (line-end-position))
+               button)))))
+
+(defun jmc-welcome--mouse-button ()
+  "Button on the row under the MOUSE pointer, or nil.
+Only when the pointer is inside a window showing this buffer and over
+an item's line. The hovered row is the one visibly lit by `mouse-face',
+so it is what the user means by \"this one\" — pressing `d' used to hit
+the (invisible-cursor) keyboard focus instead, forgetting the wrong
+item. Degrades to nil on terminals without mouse tracking."
+  (pcase-let ((`(,frame ,x . ,y) (mouse-pixel-position)))
+    (when (and frame (numberp x) (numberp y))
+      (let* ((posn (posn-at-x-y x y frame))
+             (window (posn-window posn))
+             (pos (posn-point posn)))
+        (when (and (windowp window)
+                   (eq (window-buffer window) (current-buffer))
+                   (integerp pos))
+          (jmc-welcome--button-on-line pos))))))
+
+(defun jmc-welcome--button-here ()
+  "The item the user means: the mouse-hovered row, else keyboard focus."
+  (or (jmc-welcome--mouse-button)
+      (jmc-welcome--button-on-line (point))))
+
 (defun jmc-welcome-forget-item ()
-  "Forget the list item under point (action key: d).
+  "Forget the list item on the current line (action key: d).
 Recent files leave recentf; projects leave projectile's known list (and
 its auto-discovery, when applicable). Nothing is deleted on disk."
   (interactive)
-  (let* ((button (button-at (point)))
+  (let* ((button (jmc-welcome--button-here))
          (forget-fn (and button (button-get button 'jmc-welcome-forget-fn))))
     (if forget-fn
         (funcall forget-fn)
-      (user-error "No forgettable item at point"))))
+      (user-error "No forgettable item here — move onto a recent file or project (TAB)"))))
+
+(defun jmc-welcome-activate ()
+  "Activate the button at point, or the one on the current line."
+  (interactive)
+  (if-let* ((button (jmc-welcome--button-here)))
+      (button-activate button)
+    (user-error "No item here — TAB moves between items")))
 
 (defun jmc-welcome-find-file ()
   "Prompt for a file to open (action key: f)."
@@ -362,15 +468,42 @@ the symlink."
   (interactive)
   (backward-button 1 t nil t))
 
+(defun jmc-welcome-first-button ()
+  "Move to the first list item (stands in for `beginning-of-buffer')."
+  (interactive)
+  (if jmc-welcome--first-item
+      (goto-char jmc-welcome--first-item)
+    (goto-char (point-min))
+    (forward-button 1 t nil t)))
+
+(defun jmc-welcome-last-button ()
+  "Move to the last button (stands in for `end-of-buffer')."
+  (interactive)
+  (goto-char (point-max))
+  (backward-button 1 t nil t))
+
 ;; =============================================================================
 ;; RENDERING
 ;; =============================================================================
+
+(defvar jmc-welcome-button-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map button-map)
+    ;; RET must funnel through the hover-aware `jmc-welcome-activate'
+    ;; even when point sits exactly ON a button: a button's
+    ;; text-property keymap outranks the major-mode map, so without
+    ;; this override RET would push POINT's button while the user is
+    ;; visibly hovering another.
+    (define-key map (kbd "RET") #'jmc-welcome-activate)
+    map)
+  "Keymap carried by welcome-screen buttons.")
 
 (define-button-type 'jmc-welcome
   'follow-link t          ; mouse-1 activates (not just mouse-2)
   'mouse-face 'highlight
   'pointer 'hand          ; hand cursor over clickables, like treemacs
   'cursor-face 'jmc-welcome-focus-face ; row glow via cursor-face-highlight-mode
+  'keymap jmc-welcome-button-map
   'action (lambda (button) (funcall (button-get button 'jmc-welcome-fn))))
 
 (defun jmc-welcome--center (str)
@@ -392,11 +525,18 @@ segment and the trailing component both survive."
               (substring str (- (length str) tail))))))
 
 (defun jmc-welcome--insert-banner (pad)
-  "Insert the banner block, each line prefixed with PAD."
-  (dolist (line jmc-welcome--banner)
-    (insert pad
-            (propertize (jmc-welcome--center line) 'face 'jmc-welcome-banner-face)
-            "\n"))
+  "Insert the banner block — EMACS art plus kitten — inside margin PAD.
+The two defconsts are zipped row by row; `jmc-welcome--center' handles
+propertized strings fine because it measures with `string-width'."
+  (let ((kitten jmc-welcome--kitten))
+    (dolist (line jmc-welcome--banner)
+      (insert pad
+              (jmc-welcome--center
+               (concat (propertize line 'face 'jmc-welcome-banner-face)
+                       "  "
+                       (propertize (or (pop kitten) "")
+                                   'face 'jmc-welcome-kitten-face)))
+              "\n")))
   (insert pad
           (propertize (jmc-welcome--center jmc-welcome--subtitle)
                       'face 'jmc-welcome-muted-face)
@@ -556,7 +696,16 @@ as the buffer IS shown)."
                  ?\n))
 
         (setq jmc-welcome--last-dims (cons width height))
-        (goto-char (or jmc-welcome--first-item (point-min)))))
+        (goto-char (or jmc-welcome--first-item (point-min)))
+        ;; Sync WINDOW points too. Re-renders can happen while the
+        ;; buffer is displayed in a NON-selected window (the
+        ;; projectile-load refresh, the idle re-scan), and `goto-char'
+        ;; moves only the BUFFER point — each window's own point was
+        ;; left stranded in the top padding after `erase-buffer', where
+        ;; the hidden cursor made the lost focus invisible and d/RET
+        ;; found no button ("No forgettable item at point").
+        (dolist (window (get-buffer-window-list buffer nil t))
+          (set-window-point window (point)))))
     buffer))
 
 ;; =============================================================================
@@ -577,9 +726,10 @@ as the buffer IS shown)."
     (define-key map (kbd "<left>")    #'jmc-welcome-previous-button)
     (define-key map [remap next-line]     #'jmc-welcome-next-button)
     (define-key map [remap previous-line] #'jmc-welcome-previous-button)
-    ;; RET works even if point somehow leaves a button (buttons also
-    ;; carry their own RET via the standard button keymap).
-    (define-key map (kbd "RET") #'push-button)
+    ;; RET activates the item on the current line, tolerating point
+    ;; sitting beside the button (buttons also carry their own RET via
+    ;; the standard button keymap for the exactly-on-button case).
+    (define-key map (kbd "RET") #'jmc-welcome-activate)
     ;; Quick actions.
     (define-key map (kbd "f") #'jmc-welcome-find-file)
     (define-key map (kbd "r") #'jmc-welcome-recent-files)
@@ -588,6 +738,38 @@ as the buffer IS shown)."
     ;; Forget (de-list) the item under point. List-only: nothing on disk
     ;; is touched.
     (define-key map (kbd "d") #'jmc-welcome-forget-item)
+    ;; --- Scroll lock (keys, wheel, trackpad) -------------------------
+    ;; The layout centers itself against the window; scrolling only
+    ;; breaks it. Suppression happens at the COMMAND level, via
+    ;; remapping, because the triggering EVENT may be bound in a map
+    ;; that outranks this one — pixel-scroll-precision-mode's global
+    ;; minor-mode map claims the wheel events, and minor-mode maps beat
+    ;; major-mode maps. Command remapping is resolved against the FULL
+    ;; active-map stack at execution time, so these win regardless of
+    ;; which map bound the event.
+    (dolist (cmd '(scroll-up-command scroll-down-command ; C-v/M-v, SPC/DEL
+                   scroll-up scroll-down
+                   scroll-left scroll-right               ; C-x < / C-x >
+                   mwheel-scroll                          ; classic wheel + tilt
+                   pixel-scroll-precision                 ; trackpad (Emacs 29+)
+                   pixel-scroll-start-momentum))
+      (define-key map (vector 'remap cmd) #'ignore))
+    ;; M-< / M-> hop to the extreme buttons instead of moving point into
+    ;; the padding.
+    (define-key map [remap beginning-of-buffer] #'jmc-welcome-first-button)
+    (define-key map [remap end-of-buffer]       #'jmc-welcome-last-button)
+    ;; Some scroll KEYS need neutralizing directly: cua-mode (editor.el)
+    ;; remaps scroll-up/down-command to cua-scroll-up/down from its
+    ;; EMULATION map, which outranks this map in the remap contest — and
+    ;; remapping is single-step, so remapping cua-scroll-* here would
+    ;; never be consulted. For plain KEY bindings the major mode still
+    ;; beats the global/special-mode maps, so bind the scroll keys
+    ;; themselves.
+    (define-key map (kbd "SPC")     #'ignore) ; special-mode scroll keys
+    (define-key map (kbd "S-SPC")   #'ignore)
+    (define-key map (kbd "DEL")     #'ignore)
+    (define-key map (kbd "<prior>") #'ignore) ; PageUp / PageDown
+    (define-key map (kbd "<next>")  #'ignore)
     map)
   "Keymap for `jmc-welcome-mode'.
 `q' (bury) and `g' (revert = re-render) come from `special-mode'.")
@@ -608,6 +790,14 @@ as the buffer IS shown)."
   ;; `g' from special-mode lands here.
   (setq-local revert-buffer-function
               (lambda (_ignore-auto _noconfirm) (jmc-welcome--render)))
+  ;; --- Scroll lock (window level) ---
+  ;; Never auto-hscroll to chase point: content wider than a (too
+  ;; narrow) window is simply truncated, it must not slide the layout.
+  (setq-local auto-hscroll-mode nil)
+  ;; Backstop for scroll vectors no keymap can reach: scroll-bar drags,
+  ;; edge-of-window mouse drags, `scroll-other-window' issued from
+  ;; another buffer, code calling `set-window-start'.
+  (add-hook 'window-scroll-functions #'jmc-welcome--pin-scroll-h nil t)
   ;; Re-center when the geometry changes. The BUFFER-LOCAL variant of
   ;; this hook runs (with the window selected) whenever a window starts
   ;; showing the buffer or changes size — the dims guard inside the
@@ -615,8 +805,27 @@ as the buffer IS shown)."
   (add-hook 'window-configuration-change-hook
             #'jmc-welcome--relayout-h nil t))
 
+(defun jmc-welcome--pin-scroll-h (window _display-start)
+  "Snap WINDOW back to its unscrolled state after anything scrolls it.
+Vertical pinning applies only while the content FITS the window: in one
+too small, normal scrolling has to win, or redisplay (which is obliged
+to keep point visible) would fight this hook indefinitely. Re-entry
+terminates — the second run sees an already-pinned window and changes
+nothing."
+  (set-window-hscroll window 0)
+  (with-current-buffer (window-buffer window)
+    (when (and (<= (count-lines (point-min) (point-max))
+                   (window-body-height window))
+               (/= (window-start window) (point-min)))
+      (set-window-start window (point-min)))))
+
 (defun jmc-welcome--relayout-h ()
   "Re-render iff the displaying window's geometry actually changed."
+  ;; No scroll bars on the welcome window (ported from the old
+  ;; dashboard lock): the layout cannot scroll, so a bar — macOS shows
+  ;; its overlay one during trackpad gestures — would only advertise
+  ;; movement this screen suppresses. Idempotent, so unconditional.
+  (set-window-scroll-bars (selected-window) nil nil)
   (let ((dims (cons (window-body-width) (window-body-height))))
     (unless (equal dims jmc-welcome--last-dims)
       (jmc-welcome--render (selected-window)))))
