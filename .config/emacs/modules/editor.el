@@ -23,6 +23,8 @@
 (defvar vundo-glyph-alist)
 (defvar vundo-unicode-symbols)
 (defvar electric-pair-pairs)
+(defvar no-littering-var-directory)
+(defvar no-littering-etc-directory)
 
 (declare-function electric-pair-conservative-inhibit "elec-pair")
 (declare-function global-hl-todo-mode "hl-todo")
@@ -93,14 +95,59 @@
   :ensure nil ; Built-in
   :init (save-place-mode 1))
 
-;; Track recently opened files (supercharges consult-buffer)
+;; Track recently opened files (supercharges consult-buffer, and feeds the
+;; welcome screen's "Recent Files" section).
+
+(defun jmc-recentf-exclude-dir (dir)
+  "Return a regexp excluding DIR from recentf under ALL its spellings.
+recentf stores entries ABBREVIATED — `recentf-filename-handlers'
+defaults to `abbreviate-file-name' since Emacs 28 — so a regexp built
+from `expand-file-name' alone silently fails to match the \"~/...\"
+form the list actually contains. On top of that, `user-emacs-directory'
+is reached through a stow symlink, so the same file can be recorded
+under the resolved dotfiles path too. Cover the expanded, abbreviated,
+and truename spellings in one anchored alternation."
+  (let* ((expanded (expand-file-name dir))
+         (resolved (file-truename expanded)))
+    (concat "\\`"
+            (regexp-opt (delete-dups
+                         (list expanded
+                               (abbreviate-file-name expanded)
+                               resolved
+                               (abbreviate-file-name resolved)))))))
+
 (use-package recentf
   :ensure nil ; Built-in
   :init
-  (recentf-mode 1)
-  :config
-  (setq recentf-max-menu-items 100)
-  (setq recentf-max-saved-items 1000))
+  ;; Settings must be in place BEFORE the mode starts: enabling
+  ;; `recentf-mode' loads the saved list and runs its cleanup pass right
+  ;; there (`recentf-auto-cleanup' defaults to 'mode) — with the old
+  ;; :config ordering these were applied AFTER that, so exclusions would
+  ;; never have pruned the saved list. Which is also why there were no
+  ;; exclusions: internal machinery (treemacs-persist, package sources)
+  ;; kept surfacing as "recent files" on the startup screen.
+  (setq recentf-max-menu-items 100
+        recentf-max-saved-items 1000
+        recentf-exclude
+        (list
+         ;; Emacs-internal state. no-littering routes save-files into
+         ;; var/ and config-files into etc/; .cache/ holds what ignores
+         ;; that convention (treemacs-persist); elpaca/ and elpa/ are
+         ;; package SOURCES, visited when debugging into a library —
+         ;; none of these are "files I was working on".
+         (jmc-recentf-exclude-dir no-littering-var-directory)
+         (jmc-recentf-exclude-dir no-littering-etc-directory)
+         (jmc-recentf-exclude-dir (expand-file-name ".cache/" user-emacs-directory))
+         (jmc-recentf-exclude-dir (expand-file-name "elpaca/" user-emacs-directory))
+         (jmc-recentf-exclude-dir (expand-file-name "elpa/" user-emacs-directory))
+         ;; Transient git plumbing (COMMIT_EDITMSG, rebase todo lists...).
+         "/\\.git/"
+         ;; Remote (TRAMP) entries: every cleanup pass stats its files, so
+         ;; a single remote entry can block Emacs on a dead connection.
+         "\\`/[a-zA-Z0-9-]+:"
+         ;; macOS per-session temp trees.
+         "\\`/private/var/folders/"))
+  (recentf-mode 1))
 
 ;; =============================================================================
 ;; VISUAL AIDS & FORMATTING
