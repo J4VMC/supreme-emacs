@@ -21,11 +21,12 @@
 ;;       Recent Files - recentf, junk filtered, dead files skipped.
 ;;       Projects     - projectile-known-projects, newest first.
 ;;   * Every item is a real button: TAB / S-TAB / arrows / C-n / C-p move
-;;     between them, RET (or mouse-1) opens, and each item carries a
-;;     single-DIGIT jump key (1-9, 0) shown in its left column.
+;;     between them, RET (or mouse-1) opens.
 ;;   * Action keys: f find-file, r recent files (consult), p switch
 ;;     project, e open this config's project. `g' re-renders (standard
-;;     special-mode revert), `q' buries the buffer.
+;;     special-mode revert), `q' buries the buffer. `d' FORGETS the item
+;;     under point — list bookkeeping only, nothing is touched on disk;
+;;     see `jmc-welcome-forget-item' for the auto-discovery caveats.
 ;;   * Projects open through `projectile-persp-switch-project', exactly
 ;;     like `s-p p' — each lands in its own perspective (projects.el).
 ;;
@@ -50,7 +51,10 @@
 (defvar recentf-list)
 (defvar projectile-known-projects)
 
+(defvar projectile-project-search-path)
+
 (declare-function projectile-project-root "projectile")
+(declare-function projectile-remove-known-project "projectile")
 (declare-function projectile-persp-switch-project "persp-projectile")
 (declare-function consult-recent-file "consult")
 (declare-function nerd-icons-icon-for-file "nerd-icons")
@@ -61,9 +65,18 @@
 ;; =============================================================================
 ;; FACES & OPTIONS
 ;; =============================================================================
-;; All faces inherit from standard font-lock faces so BOTH themes
-;; (gruvbox and catppuccin, see init.el) color the screen consistently
-;; without per-theme tweaking.
+;; All faces inherit from standard font-lock faces, so the screen adapts
+;; to whichever theme is active on this machine (`jmc-theme' in init.el /
+;; local.el) with no per-theme tweaking here:
+;;   * gruvbox-dark-hard: banner/headings red, keys purple, muted gray.
+;;   * catppuccin mocha:  banner/headings mauve, keys peach, muted overlay.
+;; Face inheritance resolves at DISPLAY time, so even switching themes in
+;; a running session recolors the screen without a re-render.
+
+(defgroup jmc-welcome nil
+  "Bespoke startup welcome screen."
+  :group 'convenience
+  :prefix "jmc-welcome-")
 
 (defface jmc-welcome-banner-face
   '((t :inherit font-lock-keyword-face :weight bold))
@@ -75,7 +88,7 @@
 
 (defface jmc-welcome-key-face
   '((t :inherit font-lock-constant-face :weight bold))
-  "Face for the jump-key column and the action keys.")
+  "Face for the action keys in the quick-action row.")
 
 (defface jmc-welcome-muted-face
   '((t :inherit font-lock-comment-face))
@@ -86,12 +99,10 @@
   "Face for the item under point (applied via `cursor-face').")
 
 (defvar jmc-welcome-recents-count 5
-  "How many recent files to list.  Together with
-`jmc-welcome-projects-count' this should stay at 10 or fewer — every
-item gets one of the single-digit jump keys 1-9,0.")
+  "How many recent files to list.")
 
 (defvar jmc-welcome-projects-count 5
-  "How many projects to list.  See `jmc-welcome-recents-count'.")
+  "How many projects to list.")
 
 (defvar jmc-welcome-width 66
   "Column width of the content block.  Lines are padded to center it.")
@@ -116,12 +127,6 @@ Box-drawing + block glyphs only, so it renders in the terminal too.")
 ;; =============================================================================
 ;; BUFFER-LOCAL RENDER STATE
 ;; =============================================================================
-
-(defvar-local jmc-welcome--jump-actions nil
-  "Alist of (DIGIT-CHAR . FUNCTION) for the current render.")
-
-(defvar-local jmc-welcome--key-pool nil
-  "Digit characters not yet handed out during the current render.")
 
 (defvar-local jmc-welcome--first-item nil
   "Marker at the first list item, where point parks after a render.")
@@ -159,7 +164,11 @@ own cleanup runs)."
     (while (and tail (< (length projects) jmc-welcome-projects-count))
       (let ((project (pop tail)))
         (when (and (not (file-remote-p project))
-                   (file-directory-p project))
+                   (file-directory-p project)
+                   ;; Belt and braces: forgetting already removes the
+                   ;; known-projects entry, but a hand-edited blocklist
+                   ;; must win over a stale known-projects file too.
+                   (not (jmc-welcome-project-ignored-p project)))
           (push project projects))))
     (nreverse projects)))
 
@@ -217,6 +226,100 @@ Falls back to plain Dired when persp-projectile isn't loaded yet."
       (projectile-persp-switch-project dir)
     (dired dir)))
 
+;; -----------------------------------------------------------------------------
+;; Forgetting Items (the `d' key)
+;; -----------------------------------------------------------------------------
+;; "Forget" is LIST bookkeeping only — nothing is ever deleted on disk.
+;; Recent files simply leave `recentf-list'. Projects need more care:
+;; removing one from `projectile-known-projects' is not enough when it
+;; lives under `projectile-project-search-path', because the automatic
+;; re-scan (projects.el idle timer, and projectile-mode on every launch)
+;; would silently re-discover it. Those projects additionally go onto a
+;; persistent blocklist consulted through
+;; `projectile-ignored-project-function' (wired up in projects.el).
+;;
+;; Why not projectile's own `projectile-ignored-projects' option? Its
+;; matching is broken for exactly this case: discovery offers candidates
+;; as ABBREVIATED paths ("~/...") but compares them against the option's
+;; entries mapped through `file-truename' (absolute paths) — the member
+;; check can never succeed, so blocklisted projects come straight back.
+;; Our predicate normalizes BOTH sides through `file-truename' instead.
+
+(defcustom jmc-welcome-ignored-projects nil
+  "Projects (in `file-truename' form) to keep off the welcome screen.
+Managed by `jmc-welcome-forget-item' (`d' on a project item), which
+persists it via customize into the machine-local custom.el. Also blocks
+re-discovery, through `projectile-ignored-project-function'. To un-forget
+a project, remove its entry here and visit the project again."
+  :type '(repeat directory)
+  :group 'jmc-welcome)
+
+(defun jmc-welcome-project-ignored-p (project-root)
+  "Non-nil when PROJECT-ROOT is on `jmc-welcome-ignored-projects'.
+Robust against spelling differences: projectile hands this predicate
+abbreviated paths from discovery and expanded paths from the find-file
+auto-add, so both sides are normalized through `file-truename'."
+  (member (file-truename project-root) jmc-welcome-ignored-projects))
+
+(defun jmc-welcome--rediscoverable-p (project)
+  "Non-nil when PROJECT sits under `projectile-project-search-path'.
+Such projects would be re-added by the next automatic re-scan, so
+forgetting them must also blocklist them. Search-path entries are
+either DIR strings or (DIR . DEPTH) conses."
+  (let ((expanded (expand-file-name project)))
+    (seq-some (lambda (entry)
+                (string-prefix-p
+                 (file-name-as-directory
+                  (expand-file-name (if (consp entry) (car entry) entry)))
+                 expanded))
+              (and (boundp 'projectile-project-search-path)
+                   projectile-project-search-path))))
+
+(defun jmc-welcome--forget-recent (file)
+  "Drop FILE from `recentf-list' (the file itself stays) and re-render."
+  (when (y-or-n-p (format "Forget recent file %s? "
+                          (file-name-nondirectory file)))
+    ;; FILE is the exact `recentf-list' member (the render harvests the
+    ;; list verbatim), so plain `delete' matches it. recentf persists the
+    ;; list on exit as usual.
+    (setq recentf-list (delete file recentf-list))
+    (jmc-welcome--render)
+    (message "Forgot %s (the file itself is untouched)" file)))
+
+(defun jmc-welcome--forget-project (project)
+  "Remove PROJECT from projectile's known list and re-render.
+When PROJECT would be re-discovered automatically, also blocklist it in
+`jmc-welcome-ignored-projects' (persisted via customize)."
+  (let ((rediscoverable (jmc-welcome--rediscoverable-p project)))
+    (when (y-or-n-p (format "Forget project %s%s? "
+                            (file-name-nondirectory
+                             (directory-file-name project))
+                            (if rediscoverable
+                                " (and ignore it in future scans)"
+                              "")))
+      ;; Non-interactive call: removes the entry and persists the known
+      ;; list immediately (`projectile-merge-known-projects').
+      (projectile-remove-known-project project)
+      (when rediscoverable
+        (let ((resolved (file-truename project)))
+          (unless (member resolved jmc-welcome-ignored-projects)
+            (customize-save-variable
+             'jmc-welcome-ignored-projects
+             (cons resolved jmc-welcome-ignored-projects)))))
+      (jmc-welcome--render)
+      (message "Forgot project %s (nothing deleted on disk)" project))))
+
+(defun jmc-welcome-forget-item ()
+  "Forget the list item under point (action key: d).
+Recent files leave recentf; projects leave projectile's known list (and
+its auto-discovery, when applicable). Nothing is deleted on disk."
+  (interactive)
+  (let* ((button (button-at (point)))
+         (forget-fn (and button (button-get button 'jmc-welcome-forget-fn))))
+    (if forget-fn
+        (funcall forget-fn)
+      (user-error "No forgettable item at point"))))
+
 (defun jmc-welcome-find-file ()
   "Prompt for a file to open (action key: f)."
   (interactive)
@@ -248,14 +351,6 @@ the symlink."
     (if root
         (jmc-welcome--open-project root)
       (find-file (file-truename user-init-file)))))
-
-(defun jmc-welcome-jump ()
-  "Open the item whose digit key was just pressed."
-  (interactive)
-  (let ((fn (alist-get last-command-event jmc-welcome--jump-actions)))
-    (if fn
-        (funcall fn)
-      (user-error "No item on key %c" last-command-event))))
 
 (defun jmc-welcome-next-button ()
   "Move to the next button, wrapping around at the end."
@@ -321,17 +416,17 @@ PAD is the left margin of the content block."
             (propertize hint 'face 'jmc-welcome-muted-face)
             "\n")))
 
-(defun jmc-welcome--insert-item (pad key icon name path fn)
+(defun jmc-welcome--insert-item (pad icon name path fn forget-fn)
   "Insert one clickable item row inside margin PAD.
-KEY is this item's digit jump character (or nil once the pool is dry),
-ICON an already-propertized glyph or nil, NAME the emphasized left text,
-PATH the muted remainder, FN the parameterless open function."
+ICON is an already-propertized glyph or nil, NAME the emphasized left
+text, PATH the muted remainder, FN the parameterless open function and
+FORGET-FN the parameterless de-listing function (the `d' key).
+The 3-space indent stays OUTSIDE the button so the focus highlight
+starts at the item itself."
   (let ((name-width 28)
         (start nil))
-    (insert pad)
+    (insert pad "   ")
     (setq start (point))
-    (insert (propertize (if key (format "%c  " key) "   ")
-                        'face 'jmc-welcome-key-face))
     (when icon
       (insert icon " "))
     (let ((shown (truncate-string-to-width name name-width nil nil "…")))
@@ -345,12 +440,11 @@ PATH the muted remainder, FN the parameterless open function."
     (make-text-button start (point)
                       'type 'jmc-welcome
                       'jmc-welcome-fn fn
-                      'help-echo path)
+                      'jmc-welcome-forget-fn forget-fn
+                      'help-echo (concat path "  —  RET opens · d forgets"))
     (insert "\n")
     (unless jmc-welcome--first-item
-      (setq jmc-welcome--first-item (copy-marker start)))
-    (when key
-      (push (cons key fn) jmc-welcome--jump-actions))))
+      (setq jmc-welcome--first-item (copy-marker start)))))
 
 (defun jmc-welcome--insert-empty (pad text)
   "Insert the muted empty-section line TEXT inside margin PAD."
@@ -408,32 +502,31 @@ as the buffer IS shown)."
       (let ((inhibit-read-only t)
             (pad (make-string (max 0 (/ (- width jmc-welcome-width) 2)) ?\s)))
         (erase-buffer)
-        (setq jmc-welcome--jump-actions nil
-              jmc-welcome--first-item nil
-              jmc-welcome--key-pool (string-to-list "1234567890"))
+        (setq jmc-welcome--first-item nil)
 
         (jmc-welcome--insert-banner pad)
         (insert "\n" pad (jmc-welcome--center (jmc-welcome--actions-row)) "\n\n")
 
         ;; --- Recent files ---
         (jmc-welcome--insert-heading pad "nf-oct-history" "Recent Files"
-                                     "r → search all")
+                                     "r → search all · d → forget")
         (let ((files (jmc-welcome--recent-files)))
           (if (null files)
               (jmc-welcome--insert-empty pad "Files you visit will appear here")
             (dolist (file files)
               (let ((file file)) ; fresh binding per closure — dolist reuses its var
                 (jmc-welcome--insert-item
-                 pad (pop jmc-welcome--key-pool)
+                 pad
                  (jmc-welcome--file-icon file)
                  (file-name-nondirectory file)
                  (abbreviate-file-name (or (file-name-directory file) ""))
-                 (lambda () (find-file file)))))))
+                 (lambda () (find-file file))
+                 (lambda () (jmc-welcome--forget-recent file)))))))
         (insert "\n")
 
         ;; --- Projects ---
         (jmc-welcome--insert-heading pad "nf-oct-file_directory" "Projects"
-                                     "p → open any")
+                                     "p → open any · d → forget")
         (let ((projects (jmc-welcome--projects)))
           (if (null projects)
               (jmc-welcome--insert-empty
@@ -443,11 +536,12 @@ as the buffer IS shown)."
             (dolist (project projects)
               (let ((project project))
                 (jmc-welcome--insert-item
-                 pad (pop jmc-welcome--key-pool)
+                 pad
                  (jmc-welcome--project-icon project)
                  (file-name-nondirectory (directory-file-name project))
                  (abbreviate-file-name project)
-                 (lambda () (jmc-welcome--open-project project)))))))
+                 (lambda () (jmc-welcome--open-project project))
+                 (lambda () (jmc-welcome--forget-project project)))))))
 
         (insert "\n" pad
                 (propertize (jmc-welcome--center (jmc-welcome--footer))
@@ -491,9 +585,9 @@ as the buffer IS shown)."
     (define-key map (kbd "r") #'jmc-welcome-recent-files)
     (define-key map (kbd "p") #'jmc-welcome-switch-project)
     (define-key map (kbd "e") #'jmc-welcome-open-config)
-    ;; Digit jump keys (assigned to items in list order at render time).
-    (dolist (digit (string-to-list "1234567890"))
-      (define-key map (vector digit) #'jmc-welcome-jump))
+    ;; Forget (de-list) the item under point. List-only: nothing on disk
+    ;; is touched.
+    (define-key map (kbd "d") #'jmc-welcome-forget-item)
     map)
   "Keymap for `jmc-welcome-mode'.
 `q' (bury) and `g' (revert = re-render) come from `special-mode'.")

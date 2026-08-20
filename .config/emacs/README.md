@@ -336,7 +336,7 @@ emacs
 **What happens on first launch:**
 
 1. Emacs will automatically download and install packages (takes 2-5 minutes).
-2. You'll land on a welcome screen listing your recent files and projects. Everything on it is keyboard-driven: press the digit shown next to an item to open it, move between items with `TAB` / `S-TAB` or the arrow keys and press `RET` (the mouse works too), or use the action keys — `f` find a file, `r` search all recent files, `e` open this configuration as a project. Wherever you are, `s-p h` brings the screen back.
+2. You'll land on a welcome screen listing your recent files and projects. Everything on it is keyboard-driven: move between items with `TAB` / `S-TAB` or the arrow keys and press `RET` to open (the mouse works too), or use the action keys — `f` find a file, `r` search all recent files, `p` open any project, `e` open this configuration as a project. `d` forgets the item under point (removes it from the list — nothing on disk; forgotten projects also stay out of auto-discovery). Wherever you are, `s-p h` brings the screen back.
 3. Emacs may ask to update packages (answer `y` or `n`).
 4. When you open a code file for a language whose syntax grammar isn't installed yet, Emacs **asks permission** to install it. Answer `y` — it takes a few seconds, once per language.
     - Prefer to get it all over with at once? Run `M-x treesit-auto-install-all` and grab a coffee.
@@ -419,7 +419,7 @@ Quitting asks its questions ("save this file?") in the small area at the very bo
 
 `Command-p` (`s-p`) is the central "Command Palette" for project actions. Switching to a project opens it **VS Code-style**: the full file tree appears in the sidebar and the project folder in the main window — no file prompt.
 
-Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p`, or from the welcome screen by digit key / `RET` / click — creates its workspace (or re-enters it, restored exactly as you left it). The welcome screen itself lives in the initial `main` workspace, so it's always there to come back to (`s-p h` jumps straight to it).
+Every project also gets its **own workspace** (a "perspective"): its buffers, window layout, and sidebar are isolated from every other project. Opening a project — via `s-p p`, or from the welcome screen by `RET` / click — creates its workspace (or re-enters it, restored exactly as you left it). The welcome screen itself lives in the initial `main` workspace, so it's always there to come back to (`s-p h` jumps straight to it).
 
 The isolation runs through the whole config: `C-x b` lists only the current workspace's buffers (press `/ b` inside it to reach every buffer globally — handy for pulling a buffer over from another project), and the mode-line's bottom-right corner always shows which workspace you're in.
 

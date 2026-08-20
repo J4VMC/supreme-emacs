@@ -53,6 +53,7 @@
 (defvar treemacs-create-file-functions)
 (defvar jmc-jump-map)
 (defvar projectile-known-projects)
+(defvar projectile-ignored-project-function)
 (defvar persp-mode-prefix-key)
 (defvar persp-modestring-short)
 (defvar persp-consult-source)
@@ -61,6 +62,7 @@
 
 (declare-function jmc-welcome-refresh-visible "welcome")
 (declare-function jmc-welcome "welcome")
+(declare-function jmc-welcome-project-ignored-p "welcome")
 (declare-function persp-mode "perspective")
 (declare-function projectile-mode "projectile")
 (declare-function treemacs-set-scope-type "treemacs-scope")
@@ -105,7 +107,14 @@
         ;; Automatically pick up new project directories under
         ;; `projectile-project-search-path' instead of only remembering
         ;; projects that have already been visited once.
-        projectile-auto-discover t)
+        projectile-auto-discover t
+
+        ;; Honor projects forgotten on the welcome screen (`d'). This
+        ;; predicate — NOT the builtin `projectile-ignored-projects'
+        ;; option, whose path matching is broken for discovery; see
+        ;; welcome.el — keeps blocklisted projects out of auto-discovery
+        ;; and the find-file auto-add.
+        projectile-ignored-project-function #'jmc-welcome-project-ignored-p)
   :config
   ;; Recognize bare Go modules (no VCS) as projects too.
   ;; -> `go.mod' is missing from Projectile's default marker list, so a Go
