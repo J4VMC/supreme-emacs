@@ -69,6 +69,8 @@
 (declare-function nerd-icons-icon-for-dir "nerd-icons")
 (declare-function nerd-icons-octicon "nerd-icons")
 (declare-function elpaca--queued "elpaca")
+(declare-function color-name-to-rgb "color")
+(declare-function color-rgb-to-hsl "color")
 
 ;; =============================================================================
 ;; FACES & OPTIONS
@@ -134,6 +136,59 @@ Box-drawing + block glyphs only, so it renders in the terminal too.")
 
 (defconst jmc-welcome--subtitle "· s u p r e m e ·"
   "Small tag line under the banner (nod to the repo name).")
+
+(defconst jmc-welcome--kitten
+  '("       "
+    "       "
+    "       "
+    " /\\_/\\ "
+    "( o.o )"
+    " > ^ < ")
+  "Resident orange tabby, one row per banner row.
+Bottom-aligned so it sits on the banner's shadow line. All rows are 7
+columns wide — keep them that way or the centering math drifts.")
+
+(defface jmc-welcome-kitten-face
+  '((t :weight bold :foreground "#fe8019"))
+  "Face for the banner kitten.
+A tabby has to be ORANGE, so this is the one welcome face that cannot
+just inherit a font-lock face (nothing is orange in every theme).
+`jmc-welcome--retint-kitten' re-derives the exact orange from the
+active theme; the spec here is only the pre-theme fallback.")
+
+(defun jmc-welcome--kitten-color ()
+  "Return the active theme's best orange.
+Scores warm candidate faces by hue distance to tabby-orange (25 deg),
+skipping washed-out colors; falls back to stock #fe8019 when the theme
+offers nothing warm. gruvbox lands on its bright orange (builtin face),
+catppuccin on peach (constant face)."
+  (require 'color)
+  (let ((best nil)
+        (best-dist 41)) ; only accept hues within 40 deg of orange
+    (dolist (face '(font-lock-builtin-face font-lock-constant-face
+                    warning font-lock-keyword-face font-lock-string-face))
+      (let* ((color (face-attribute face :foreground nil t))
+             (rgb (and (stringp color) (color-name-to-rgb color))))
+        (when rgb
+          (pcase-let* ((`(,h ,s ,_l) (apply #'color-rgb-to-hsl rgb))
+                       (hue (* h 360.0))
+                       (dist (min (abs (- hue 25)) (- 360 (abs (- hue 25))))))
+            (when (and (>= s 0.3) (< dist best-dist))
+              (setq best color
+                    best-dist dist))))))
+    (or best "#fe8019")))
+
+(defun jmc-welcome--retint-kitten (&rest _)
+  "Point `jmc-welcome-kitten-face' at the active theme's orange.
+Runs at load and from `enable-theme-functions' — at module-load time
+the theme usually is not active yet (Elpaca installs it asynchronously),
+so the load-time call may see default faces and keep the fallback; the
+theme's own enable then corrects it."
+  (set-face-attribute 'jmc-welcome-kitten-face nil
+                      :foreground (jmc-welcome--kitten-color)))
+
+(jmc-welcome--retint-kitten)
+(add-hook 'enable-theme-functions #'jmc-welcome--retint-kitten)
 
 ;; =============================================================================
 ;; BUFFER-LOCAL RENDER STATE
@@ -470,11 +525,18 @@ segment and the trailing component both survive."
               (substring str (- (length str) tail))))))
 
 (defun jmc-welcome--insert-banner (pad)
-  "Insert the banner block, each line prefixed with PAD."
-  (dolist (line jmc-welcome--banner)
-    (insert pad
-            (propertize (jmc-welcome--center line) 'face 'jmc-welcome-banner-face)
-            "\n"))
+  "Insert the banner block — EMACS art plus kitten — inside margin PAD.
+The two defconsts are zipped row by row; `jmc-welcome--center' handles
+propertized strings fine because it measures with `string-width'."
+  (let ((kitten jmc-welcome--kitten))
+    (dolist (line jmc-welcome--banner)
+      (insert pad
+              (jmc-welcome--center
+               (concat (propertize line 'face 'jmc-welcome-banner-face)
+                       "  "
+                       (propertize (or (pop kitten) "")
+                                   'face 'jmc-welcome-kitten-face)))
+              "\n")))
   (insert pad
           (propertize (jmc-welcome--center jmc-welcome--subtitle)
                       'face 'jmc-welcome-muted-face)
