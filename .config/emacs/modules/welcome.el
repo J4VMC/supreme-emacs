@@ -26,11 +26,15 @@
 ;;       Projects     - projectile-known-projects, newest first.
 ;;   * Every item is a real button: TAB / S-TAB / arrows / C-n / C-p move
 ;;     between them, RET (or mouse-1) opens.
+;;   * `d' and RET target the MOUSE-HOVERED row when there is one (the
+;;     row lit under the pointer is what "this one" means), and the
+;;     keyboard-focused row otherwise — which is why the keyboard focus
+;;     highlight is BOLD, so the two can be told apart.
 ;;   * Action keys: f find-file, r recent files (consult), p switch
 ;;     project, e open this config's project. `g' re-renders (standard
-;;     special-mode revert), `q' buries the buffer. `d' FORGETS the item
-;;     under point — list bookkeeping only, nothing is touched on disk;
-;;     see `jmc-welcome-forget-item' for the auto-discovery caveats.
+;;     special-mode revert), `q' buries the buffer. `d' FORGETS the
+;;     targeted item — list bookkeeping only, nothing is touched on
+;;     disk; see `jmc-welcome-forget-item' for auto-discovery caveats.
 ;;   * Projects open through `projectile-persp-switch-project', exactly
 ;;     like `s-p p' — each lands in its own perspective (projects.el).
 ;;
@@ -99,8 +103,11 @@
   "Face for de-emphasized text: paths, hints, the footer.")
 
 (defface jmc-welcome-focus-face
-  '((t :inherit highlight))
-  "Face for the item under point (applied via `cursor-face').")
+  '((t :inherit highlight :weight bold))
+  "Face for the KEYBOARD-focused item (applied via `cursor-face').
+Bold on purpose: mouse hover paints rows with the plain `highlight'
+mouse-face, and the two targets must be tellable apart — `d'/RET act on
+the hovered row when the mouse is over one, else on this one.")
 
 (defvar jmc-welcome-recents-count 5
   "How many recent files to list.")
@@ -313,15 +320,38 @@ When PROJECT would be re-discovered automatically, also blocklist it in
       (jmc-welcome--render)
       (message "Forgot project %s (nothing deleted on disk)" project))))
 
+(defun jmc-welcome--button-on-line (pos)
+  "Return the button at POS, or failing that the one on POS's line.
+POS can legitimately sit NEXT TO the intended item — in the row's left
+padding, say — so item lookups tolerate the whole line."
+  (or (button-at pos)
+      (save-excursion
+        (goto-char pos)
+        (when-let* ((button (next-button (line-beginning-position) t)))
+          (and (<= (button-start button) (line-end-position))
+               button)))))
+
+(defun jmc-welcome--mouse-button ()
+  "Button on the row under the MOUSE pointer, or nil.
+Only when the pointer is inside a window showing this buffer and over
+an item's line. The hovered row is the one visibly lit by `mouse-face',
+so it is what the user means by \"this one\" — pressing `d' used to hit
+the (invisible-cursor) keyboard focus instead, forgetting the wrong
+item. Degrades to nil on terminals without mouse tracking."
+  (pcase-let ((`(,frame ,x . ,y) (mouse-pixel-position)))
+    (when (and frame (numberp x) (numberp y))
+      (let* ((posn (posn-at-x-y x y frame))
+             (window (posn-window posn))
+             (pos (posn-point posn)))
+        (when (and (windowp window)
+                   (eq (window-buffer window) (current-buffer))
+                   (integerp pos))
+          (jmc-welcome--button-on-line pos))))))
+
 (defun jmc-welcome--button-here ()
-  "Return the button at point, or failing that the one on point's line.
-Point can legitimately sit NEXT TO the intended item — a mouse click in
-the row's left padding, say — so commands aimed at \"the item here\"
-tolerate the whole line."
-  (or (button-at (point))
-      (when-let* ((button (next-button (line-beginning-position) t)))
-        (and (<= (button-start button) (line-end-position))
-             button))))
+  "The item the user means: the mouse-hovered row, else keyboard focus."
+  (or (jmc-welcome--mouse-button)
+      (jmc-welcome--button-on-line (point))))
 
 (defun jmc-welcome-forget-item ()
   "Forget the list item on the current line (action key: d).
@@ -401,11 +431,24 @@ the symlink."
 ;; RENDERING
 ;; =============================================================================
 
+(defvar jmc-welcome-button-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map button-map)
+    ;; RET must funnel through the hover-aware `jmc-welcome-activate'
+    ;; even when point sits exactly ON a button: a button's
+    ;; text-property keymap outranks the major-mode map, so without
+    ;; this override RET would push POINT's button while the user is
+    ;; visibly hovering another.
+    (define-key map (kbd "RET") #'jmc-welcome-activate)
+    map)
+  "Keymap carried by welcome-screen buttons.")
+
 (define-button-type 'jmc-welcome
   'follow-link t          ; mouse-1 activates (not just mouse-2)
   'mouse-face 'highlight
   'pointer 'hand          ; hand cursor over clickables, like treemacs
   'cursor-face 'jmc-welcome-focus-face ; row glow via cursor-face-highlight-mode
+  'keymap jmc-welcome-button-map
   'action (lambda (button) (funcall (button-get button 'jmc-welcome-fn))))
 
 (defun jmc-welcome--center (str)
