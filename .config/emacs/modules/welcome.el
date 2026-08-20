@@ -13,7 +13,11 @@
 ;; Rather than fight the package's rendering pipeline, this module draws
 ;; the whole screen itself (~an insert loop) and gets to be keyboard-first
 ;; by construction. No lock mode: movement keys are BOUND TO item
-;; navigation instead of disabled.
+;; navigation instead of disabled. What IS locked, deliberately, is
+;; SCROLLING — the layout centers itself against the window, so any
+;; scroll (wheel, trackpad, SPC/C-v, scroll-bar drag) only breaks it.
+;; Scroll commands are remapped away and a window hook snaps back
+;; anything that slips through; see the "Scroll lock" sections below.
 ;;
 ;; The screen:
 ;;   * ASCII banner + a footer with package count / startup time.
@@ -362,6 +366,20 @@ the symlink."
   (interactive)
   (backward-button 1 t nil t))
 
+(defun jmc-welcome-first-button ()
+  "Move to the first list item (stands in for `beginning-of-buffer')."
+  (interactive)
+  (if jmc-welcome--first-item
+      (goto-char jmc-welcome--first-item)
+    (goto-char (point-min))
+    (forward-button 1 t nil t)))
+
+(defun jmc-welcome-last-button ()
+  "Move to the last button (stands in for `end-of-buffer')."
+  (interactive)
+  (goto-char (point-max))
+  (backward-button 1 t nil t))
+
 ;; =============================================================================
 ;; RENDERING
 ;; =============================================================================
@@ -588,6 +606,38 @@ as the buffer IS shown)."
     ;; Forget (de-list) the item under point. List-only: nothing on disk
     ;; is touched.
     (define-key map (kbd "d") #'jmc-welcome-forget-item)
+    ;; --- Scroll lock (keys, wheel, trackpad) -------------------------
+    ;; The layout centers itself against the window; scrolling only
+    ;; breaks it. Suppression happens at the COMMAND level, via
+    ;; remapping, because the triggering EVENT may be bound in a map
+    ;; that outranks this one — pixel-scroll-precision-mode's global
+    ;; minor-mode map claims the wheel events, and minor-mode maps beat
+    ;; major-mode maps. Command remapping is resolved against the FULL
+    ;; active-map stack at execution time, so these win regardless of
+    ;; which map bound the event.
+    (dolist (cmd '(scroll-up-command scroll-down-command ; C-v/M-v, SPC/DEL
+                   scroll-up scroll-down
+                   scroll-left scroll-right               ; C-x < / C-x >
+                   mwheel-scroll                          ; classic wheel + tilt
+                   pixel-scroll-precision                 ; trackpad (Emacs 29+)
+                   pixel-scroll-start-momentum))
+      (define-key map (vector 'remap cmd) #'ignore))
+    ;; M-< / M-> hop to the extreme buttons instead of moving point into
+    ;; the padding.
+    (define-key map [remap beginning-of-buffer] #'jmc-welcome-first-button)
+    (define-key map [remap end-of-buffer]       #'jmc-welcome-last-button)
+    ;; Some scroll KEYS need neutralizing directly: cua-mode (editor.el)
+    ;; remaps scroll-up/down-command to cua-scroll-up/down from its
+    ;; EMULATION map, which outranks this map in the remap contest — and
+    ;; remapping is single-step, so remapping cua-scroll-* here would
+    ;; never be consulted. For plain KEY bindings the major mode still
+    ;; beats the global/special-mode maps, so bind the scroll keys
+    ;; themselves.
+    (define-key map (kbd "SPC")     #'ignore) ; special-mode scroll keys
+    (define-key map (kbd "S-SPC")   #'ignore)
+    (define-key map (kbd "DEL")     #'ignore)
+    (define-key map (kbd "<prior>") #'ignore) ; PageUp / PageDown
+    (define-key map (kbd "<next>")  #'ignore)
     map)
   "Keymap for `jmc-welcome-mode'.
 `q' (bury) and `g' (revert = re-render) come from `special-mode'.")
@@ -608,6 +658,14 @@ as the buffer IS shown)."
   ;; `g' from special-mode lands here.
   (setq-local revert-buffer-function
               (lambda (_ignore-auto _noconfirm) (jmc-welcome--render)))
+  ;; --- Scroll lock (window level) ---
+  ;; Never auto-hscroll to chase point: content wider than a (too
+  ;; narrow) window is simply truncated, it must not slide the layout.
+  (setq-local auto-hscroll-mode nil)
+  ;; Backstop for scroll vectors no keymap can reach: scroll-bar drags,
+  ;; edge-of-window mouse drags, `scroll-other-window' issued from
+  ;; another buffer, code calling `set-window-start'.
+  (add-hook 'window-scroll-functions #'jmc-welcome--pin-scroll-h nil t)
   ;; Re-center when the geometry changes. The BUFFER-LOCAL variant of
   ;; this hook runs (with the window selected) whenever a window starts
   ;; showing the buffer or changes size — the dims guard inside the
@@ -615,8 +673,27 @@ as the buffer IS shown)."
   (add-hook 'window-configuration-change-hook
             #'jmc-welcome--relayout-h nil t))
 
+(defun jmc-welcome--pin-scroll-h (window _display-start)
+  "Snap WINDOW back to its unscrolled state after anything scrolls it.
+Vertical pinning applies only while the content FITS the window: in one
+too small, normal scrolling has to win, or redisplay (which is obliged
+to keep point visible) would fight this hook indefinitely. Re-entry
+terminates — the second run sees an already-pinned window and changes
+nothing."
+  (set-window-hscroll window 0)
+  (with-current-buffer (window-buffer window)
+    (when (and (<= (count-lines (point-min) (point-max))
+                   (window-body-height window))
+               (/= (window-start window) (point-min)))
+      (set-window-start window (point-min)))))
+
 (defun jmc-welcome--relayout-h ()
   "Re-render iff the displaying window's geometry actually changed."
+  ;; No scroll bars on the welcome window (ported from the old
+  ;; dashboard lock): the layout cannot scroll, so a bar — macOS shows
+  ;; its overlay one during trackpad gestures — would only advertise
+  ;; movement this screen suppresses. Idempotent, so unconditional.
+  (set-window-scroll-bars (selected-window) nil nil)
   (let ((dims (cons (window-body-width) (window-body-height))))
     (unless (equal dims jmc-welcome--last-dims)
       (jmc-welcome--render (selected-window)))))
