@@ -24,6 +24,7 @@
 (defvar display-time-interval)
 (defvar corfu-margin-formatters)
 (defvar dimmer-buffer-exclusion-regexps)
+(defvar telephone-line-faces)
 
 (declare-function ligature-set-ligatures "ligature")
 (declare-function global-ligature-mode "ligature")
@@ -407,29 +408,164 @@
 ;; Use `telephone-line` for a modern, customizable mode-line.
 ;; -> The mode-line is the status bar at the bottom of each window.
 ;; -> Shows information like file name, git branch, line/column, errors, etc.
+;;
+;; -----------------------------------------------------------------------------
+;; Theme-agnostic, high-contrast palette
+;; -----------------------------------------------------------------------------
+;; Neither of our themes styles telephone-line, so out of the box the
+;; accent sections kept upstream's neutral "grey22" (clashing with any
+;; warm palette), and the sections previously on the `evil' color slot
+;; silently fell back to the plain `mode-line' face — without evil-mode,
+;; `telephone-line-modal-face' resolves `evil' to `mode-line' — leaving
+;; the whole bar one muddy strip (gruvbox: light2 on dark3, a ~3.4:1
+;; contrast ratio, below even WCAG AA).
+;;
+;; Rather than a hardcoded per-theme color table, the palette is DERIVED
+;; from whatever theme is active, each time one is enabled:
+;;   * base sections:   the editor background raised one step toward the
+;;                      foreground, with the theme's FULL-strength
+;;                      foreground as text — this is where the old setup
+;;                      lost contrast (themes dim their mode-line text).
+;;   * accent sections: raised a second step -> a clear visual hierarchy.
+;;   * end blocks (`jmc-strong' slot): a vivid theme color carrying the
+;;                      editor background as bold text. The color is the
+;;                      first sufficiently readable candidate among the
+;;                      `warning' / function-name / keyword faces, so
+;;                      gruvbox-dark-hard lands on its signature yellow
+;;                      (#fabd2f) and catppuccin on its yellow — with a
+;;                      contrast-checked fallback for any future theme.
+;; Everything recomputes via `enable-theme-functions', so switching
+;; themes restyles the bar with zero per-theme code here.
+
+(defface jmc-telephone-strong-active
+  '((t (:weight bold :inherit telephone-line-accent-active)))
+  "End-block face for the mode-line's outermost sections.
+Actual colors are derived from the active theme by
+`jmc-modeline-apply-palette'; this spec is only the pre-theme fallback.")
+
+(defface jmc-telephone-strong-inactive
+  '((t (:inherit telephone-line-accent-inactive)))
+  "Inactive-window counterpart of `jmc-telephone-strong-active'.")
+
+(defun jmc-modeline--hex (color)
+  "Normalize COLOR to a \"#rrggbb\" string, or nil for unusable values."
+  (when (and (stringp color) (not (string= color "unspecified")))
+    (when-let* ((rgb (color-name-to-rgb color)))
+      (apply #'color-rgb-to-hex (append rgb '(2))))))
+
+(defun jmc-modeline--blend (from to alpha)
+  "Blend color FROM toward color TO by ALPHA (0.0 keeps FROM, 1.0 is TO)."
+  (pcase-let ((`(,r1 ,g1 ,b1) (color-name-to-rgb from))
+              (`(,r2 ,g2 ,b2) (color-name-to-rgb to)))
+    (color-rgb-to-hex (+ (* (- 1 alpha) r1) (* alpha r2))
+                      (+ (* (- 1 alpha) g1) (* alpha g2))
+                      (+ (* (- 1 alpha) b1) (* alpha b2))
+                      2)))
+
+(defun jmc-modeline--contrast (c1 c2)
+  "Return the WCAG contrast ratio (1.0-21.0) between colors C1 and C2."
+  (let* ((lum (lambda (c)
+                (pcase-let ((`(,r ,g ,b)
+                             (mapcar (lambda (v)
+                                       (if (<= v 0.03928)
+                                           (/ v 12.92)
+                                         (expt (/ (+ v 0.055) 1.055) 2.4)))
+                                     (color-name-to-rgb c))))
+                  (+ (* 0.2126 r) (* 0.7152 g) (* 0.0722 b)))))
+         (l1 (funcall lum c1))
+         (l2 (funcall lum c2)))
+    (/ (+ (max l1 l2) 0.05) (+ (min l1 l2) 0.05))))
+
+(defun jmc-modeline--pop-color (bg fg)
+  "Pick the end-block color for a theme whose canvas is BG.
+The first candidate face whose foreground reads on BG with at least a
+4.5:1 (WCAG AA) contrast ratio wins; FG is the last-resort fallback."
+  (or (seq-find (lambda (color)
+                  (and color (>= (jmc-modeline--contrast color bg) 4.5)))
+                (mapcar (lambda (face)
+                          (jmc-modeline--hex
+                           (face-attribute face :foreground nil t)))
+                        '(warning
+                          font-lock-function-name-face
+                          font-lock-keyword-face)))
+      fg))
+
+(defun jmc-modeline-apply-palette (&rest _)
+  "Derive the mode-line palette from the active theme's own colors.
+Runs at startup and from `enable-theme-functions' (the trailing hook of
+every `enable-theme'), so it always has the final theme values — and
+always wins over whatever the theme set on `mode-line'."
+  (require 'color)
+  (let* ((bg (or (jmc-modeline--hex (face-attribute 'default :background))
+                 "#1d2021")) ; tty fallback: unspecified -> gruvbox bg0_h
+         (fg (or (jmc-modeline--hex (face-attribute 'default :foreground))
+                 "#ebdbb2"))
+         (pop (jmc-modeline--pop-color bg fg))
+         (base-bg (jmc-modeline--blend bg fg 0.12))
+         (accent-bg (jmc-modeline--blend bg fg 0.24))
+         (inactive-bg (jmc-modeline--blend bg fg 0.06))
+         (dim-fg (jmc-modeline--blend fg bg 0.45)))
+    ;; Base sections ('nil slot). Full-strength foreground on a slightly
+    ;; raised background — the single biggest contrast win over the
+    ;; themes' own dimmed mode-line text.
+    (set-face-attribute 'mode-line nil
+                        :background base-bg :foreground fg :box nil)
+    (set-face-attribute 'mode-line-inactive nil
+                        :background inactive-bg :foreground dim-fg :box nil)
+    ;; Accent sections: one more step up, replacing upstream's grey22.
+    (set-face-attribute 'telephone-line-accent-active nil
+                        :background accent-bg :foreground fg)
+    (set-face-attribute 'telephone-line-accent-inactive nil
+                        :background base-bg :foreground dim-fg)
+    ;; End blocks: vivid color, editor background as bold text.
+    (set-face-attribute 'jmc-telephone-strong-active nil
+                        :background pop :foreground bg :weight 'bold)
+    (set-face-attribute 'jmc-telephone-strong-inactive nil
+                        :background accent-bg :foreground dim-fg
+                        :weight 'normal)
+    ;; Segment detail faces: project name in the pop color; de-emphasized
+    ;; text in the blended gray instead of upstream's hardcoded
+    ;; "light green" / "dim grey" (neither belongs to any theme).
+    (set-face-attribute 'telephone-line-projectile nil
+                        :foreground pop :weight 'bold)
+    (set-face-attribute 'telephone-line-unimportant nil
+                        :foreground dim-fg)))
+
 (use-package telephone-line
   :custom
   ;; Left-hand side segments.
-  ;; -> Git branch, project name, minor modes, and buffer name.
+  ;; -> Git branch (strong end block), project name, minor modes, buffer.
   (telephone-line-lhs
-   '((evil   . (telephone-line-vc-segment))
-     (accent . (telephone-line-project-segment
-                telephone-line-process-segment))
-     (nil    . (telephone-line-minor-mode-segment
-                telephone-line-buffer-segment))))
+   '((jmc-strong . (telephone-line-vc-segment))
+     (accent     . (telephone-line-project-segment
+                    telephone-line-process-segment))
+     (nil        . (telephone-line-minor-mode-segment
+                    telephone-line-buffer-segment))))
 
   ;; Right-hand side segments.
-  ;; -> File encoding, error count, major mode, and position info.
+  ;; -> File encoding, error count, major mode; clock/workspace in the
+  ;;    strong end block.
   (telephone-line-rhs
-   '((nil    . (telephone-line-atom-encoding-segment))
-     (accent . (telephone-line-flycheck-segment
-                telephone-line-major-mode-segment))
-     (evil   . (telephone-line-misc-info-segment))))
+   '((nil        . (telephone-line-atom-encoding-segment))
+     (accent     . (telephone-line-flycheck-segment
+                    telephone-line-major-mode-segment))
+     (jmc-strong . (telephone-line-misc-info-segment))))
 
   ;; Set the height of the mode-line.
   (telephone-line-height 24)
 
   :config
+  ;; Register the custom `jmc-strong' color slot used in lhs/rhs above.
+  ;; MUST precede `telephone-line-mode', which compiles the format.
+  (add-to-list 'telephone-line-faces
+               '(jmc-strong . (jmc-telephone-strong-active
+                               . jmc-telephone-strong-inactive)))
+
+  ;; Apply the derived palette now (the startup theme loaded long before
+  ;; this package), and re-derive it on every future theme switch.
+  (jmc-modeline-apply-palette)
+  (add-hook 'enable-theme-functions #'jmc-modeline-apply-palette)
+
   (telephone-line-mode 1))
 
 ;; Replace the default help system with `helpful`.
