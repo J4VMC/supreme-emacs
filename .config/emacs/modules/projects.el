@@ -59,7 +59,8 @@
 (defvar consult-buffer-sources)
 (defvar consult--source-buffer)
 
-(declare-function dashboard-refresh-buffer "dashboard")
+(declare-function jmc-welcome-refresh-visible "welcome")
+(declare-function jmc-welcome "welcome")
 (declare-function persp-mode "perspective")
 (declare-function projectile-mode "projectile")
 (declare-function treemacs-set-scope-type "treemacs-scope")
@@ -125,24 +126,21 @@
 
   ;; Re-scan the search path so newly created project directories are known
   ;; without having been visited once. `projectile-auto-discover' only
-  ;; triggers discovery from interactive switch commands, and the dashboard
-  ;; reads `projectile-known-projects-file' directly, so an explicit scan is
-  ;; still needed.
+  ;; triggers discovery from interactive switch commands, so an explicit
+  ;; scan is still needed.
   ;; -> DEFERRED to idle time: the scan walks ~/Projects three levels deep,
-  ;;    which was pure startup latency when run synchronously here. If the
-  ;;    scan finds new projects while you are still looking at the
-  ;;    dashboard, the dashboard is refreshed in place; otherwise the new
-  ;;    entries simply show up in `s-p p' and on the next launch.
+  ;;    which was pure startup latency when run synchronously here.
+  ;; -> The welcome screen (welcome.el) lists projects from the live
+  ;;    `projectile-known-projects', so re-render it after the scan while
+  ;;    it is on display. Unconditionally: even when the scan found
+  ;;    nothing new, the screen may still be showing the pre-projectile
+  ;;    "still loading" placeholder from early startup.
   (run-with-idle-timer
    1 nil
    (lambda ()
-     (let ((before (length projectile-known-projects)))
-       (projectile-discover-projects-in-search-path)
-       (when (and (> (length projectile-known-projects) before)
-                  (fboundp 'dashboard-refresh-buffer)
-                  (eq (window-buffer (selected-window))
-                      (get-buffer "*dashboard*")))
-         (dashboard-refresh-buffer))))))
+     (projectile-discover-projects-in-search-path)
+     (when (fboundp 'jmc-welcome-refresh-visible)
+       (jmc-welcome-refresh-visible)))))
 
 ;; =============================================================================
 ;; PERSPECTIVE (PER-PROJECT WORKSPACES)
@@ -435,6 +433,10 @@ the main window, ready for `s-p f' or the tree."
 (define-key jmc-jump-map (kbd "g") 'consult-ripgrep)
 (define-key jmc-jump-map (kbd "c") 'projectile-compile-project)  ; Trigger build command.
 (define-key jmc-jump-map (kbd "a") 'claude-code)                 ; Launch Claude at root (ai.el).
+
+;; Back to the welcome screen ("home"). Handy from deep inside a project
+;; when you want the recents/projects launcher without touching the mouse.
+(define-key jmc-jump-map (kbd "h") 'jmc-welcome)
 
 ;; Terminal at project root.
 ;; -> FIXED: this used to be `projectile-run-vterm' (and `s-p v' was

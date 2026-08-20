@@ -439,7 +439,8 @@ After updating and verifying everything works, run
 ;; -> Each module must end with a corresponding `(provide 'module-name)`.
 
 (require 'editor)      ; General editing (line numbers, matching parens)
-(require 'interface)   ; UI customizations (dashboard, mode-line)
+(require 'interface)   ; UI customizations (fonts, icons, mode-line)
+(require 'welcome)     ; Bespoke startup screen (replaced the dashboard package)
 (require 'completion)  ; Completion frameworks (Vertico, Corfu)
 
 (require 'explorer)    ; File management tools (Dired tweaks)
