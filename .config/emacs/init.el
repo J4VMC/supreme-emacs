@@ -118,8 +118,9 @@
       ;; 3. Ensure the directory is in exec-path
       (add-to-list 'exec-path (file-name-directory gcc-path)))))
 
-;; Silence asynchronous native compilation warnings.
-(setq native-comp-async-report-warnings-errors 'silent)
+;; (`native-comp-async-report-warnings-errors' is set to 'silent in
+;;  early-init.el, before any native compilation can start; it was
+;;  duplicated here.)
 
 ;; =============================================================================
 ;; EMACS SERVER
@@ -184,12 +185,19 @@
 ;;
 ;; This is the standard bootstrap boilerplate for Elpaca, our package manager.
 ;; It is responsible for downloading and installing Elpaca automatically on the
-;; first run. Generally, this block does not need to be modified.
+;; first run. Keep it in sync with the upstream installer (see the note on
+;; the installer version below); it is otherwise not meant to be modified.
 
-(defvar elpaca-installer-version 0.11)
+(defvar elpaca-installer-version 0.12)
 (defvar elpaca-directory (expand-file-name "elpaca/" user-emacs-directory))
 (defvar elpaca-builds-directory (expand-file-name "builds/" elpaca-directory))
-(defvar elpaca-repos-directory (expand-file-name "repos/" elpaca-directory))
+;; Installer 0.12 renamed the checkout directory from repos/ to sources/.
+;; The installer version MUST track upstream: `:ref nil` clones Elpaca HEAD,
+;; and a newer Elpaca with an older installer looks for its own checkout in
+;; the wrong place, clones itself a second time, and the dependency scan for
+;; the first package races that clone ("file-missing ... sources/elpaca/
+;; extensions/elpaca-use-package.el"). Elpaca also warns when they differ.
+(defvar elpaca-sources-directory (expand-file-name "sources/" elpaca-directory))
 
 ;; --- Lock file (reproducible package set) -----------------------------------
 ;; Many packages here track GitHub HEAD (`:ref nil`), so without pinning,
@@ -226,12 +234,20 @@ After updating and verifying everything works, run
   (setq elpaca-lock-file nil)
   (elpaca-update-all))
 
+;; Cap concurrent orders. Elpaca's default is unlimited, so a fresh install
+;; fires ~150 clones at once. Its clones are tree-less (--filter=tree:0),
+;; which makes the checkout phase a second round of on-demand blob fetches,
+;; and under that load the largest repos (magit, lsp-mode, claude-code)
+;; intermittently died mid-checkout, leaving a .git with no working tree.
+;; Elpaca's re-clone path then trips over the leftover directory
+;; ("(processp nil)"). The same clones succeed one at a time.
+(setq elpaca-queue-limit 12)
+
 (defvar elpaca-order '(elpaca :repo "https://github.com/progfolio/elpaca.git"
                               :ref nil :depth 1 :inherit ignore
-                              :files (:defaults "elpaca-test.el")
-                              :build (:not elpaca--activate-package)))
-
-(let* ((repo  (expand-file-name "elpaca/" elpaca-repos-directory))
+                              :files (:defaults "elpaca-test.el" (:exclude "extensions"))
+                              :build (:not elpaca-activate)))
+(let* ((repo  (expand-file-name "elpaca/" elpaca-sources-directory))
        (build (expand-file-name "elpaca/" elpaca-builds-directory))
        (order (cdr elpaca-order))
        (default-directory repo))
@@ -258,9 +274,7 @@ After updating and verifying everything works, run
   (unless (require 'elpaca-autoloads nil t)
     (require 'elpaca)
     (elpaca-generate-autoloads "elpaca" repo)
-    (let ((load-source-file-function nil))
-      (unless (featurep 'elpaca-autoloads) ;; Only load if not already present
-        (load (expand-file-name "elpaca-autoloads" elpaca-directory) t t)))))
+    (let ((load-source-file-function nil)) (load "./elpaca-autoloads"))))
 
 ;; Tell Elpaca to process any pending package operations (installs, etc.)
 ;; *after* Emacs has finished initializing.
@@ -303,11 +317,12 @@ After updating and verifying everything works, run
 ;; =============================================================================
 ;; Declared explicitly, FIRST among packages, and waited on — for two reasons:
 ;;
-;; 1. Emacs 30 advertises a builtin `compat' (version 30.x) in
-;;    `package--builtin-versions', so Elpaca treats every package's compat
-;;    dependency as already satisfied and never installs the real GNU ELPA
-;;    package. That broke jinx (editor.el), which requires compat >= 31 —
-;;    a version the builtin stub can never satisfy.
+;; 1. Emacs advertises a builtin `compat' stub in `package--builtin-versions'
+;;    (30.x on Emacs 30, 31.1 on Emacs 31), so Elpaca treats every package's
+;;    compat dependency as already satisfied and never installs the real GNU
+;;    ELPA package. Whenever a package requires a compat NEWER than that stub
+;;    (jinx needed >= 31 on Emacs 30), it silently breaks; the explicit order
+;;    forces the real package regardless of which Emacs this runs on.
 ;;
 ;; 2. It must be declared BEFORE no-littering: no-littering.el does
 ;;    `(require 'compat)` at load time, so if compat's explicit order came
@@ -351,7 +366,7 @@ After updating and verifying everything works, run
 ;; "Homebrew PATH bootstrap" section near the top is for.
 
 (use-package exec-path-from-shell
-  :demand t ;; Load immediately (do not lazy-load).
+  :defer 1 ;; Load (and run) after one idle second, not during startup.
   :init
   ;; `-l` runs fish as a login shell, so config.fish (and universal
   ;; `fish_user_paths`) are applied.
@@ -360,16 +375,21 @@ After updating and verifying everything works, run
   :config
   ;; Apply the variables only in graphical Emacs.
   ;; -> Terminal Emacs (`emacs -nw`) inherits the correct environment automatically.
-  (run-with-idle-timer 1.0 nil (lambda ()
-				 (when (memq window-system '(mac ns x))
-				   (exec-path-from-shell-initialize)))))
+  ;; -> `:defer 1' above IS the idle timer: the package used to be loaded
+  ;;    eagerly (`:demand t') only to schedule this same call on its own
+  ;;    one-second idle timer.
+  (when (memq window-system '(mac ns x))
+    (exec-path-from-shell-initialize)))
 
 ;; =============================================================================
 ;; CORE PACKAGES & UI
 ;; =============================================================================
 
 ;; Install `transient`, a required dependency for complex pop-up menus (e.g., Magit).
-(use-package transient)
+;; -> `:defer t': it only needs to be INSTALLED up front; Magit and friends
+;;    require it themselves when they load.
+(use-package transient
+  :defer t)
 
 ;; `diminish` hides or shortens minor mode names in the mode-line (status bar)
 ;; to reduce visual clutter.

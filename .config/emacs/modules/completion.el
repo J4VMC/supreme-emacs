@@ -43,7 +43,6 @@
 (declare-function global-corfu-mode "corfu")
 (declare-function corfu-popupinfo-mode "corfu-popupinfo")
 (declare-function corfu-indexed-mode "corfu-indexed")
-(declare-function corfu-terminal-mode "corfu-terminal")
 (declare-function cape-capf-super "cape")
 (declare-function tempel-expand "tempel")
 (declare-function global-tempel-abbrev-mode "tempel")
@@ -88,9 +87,11 @@
   ;; Allow navigation to wrap around. Pressing 'down' at the bottom of the
   ;; list takes you back to the top, and vice-versa.
   (vertico-cycle t)
+  ;; (No `file' styles entry here: the file category's completion styles are
+  ;;  set once, in `completion-category-overrides' in the orderless block
+  ;;  below. This list is for Vertico DISPLAY modes.)
   (vertico-multiform-categories
-   '((file (styles basic partial-completion orderless))
-     (consult-grep buffer) ; -> Use a wider view for grep results
+   '((consult-grep buffer) ; -> Use a wider view for grep results
      (emoji grid)
      (symbol (vertico-sort-function . vertico-sort-alpha)))))
 
@@ -265,19 +266,12 @@
   :config
   (corfu-popupinfo-mode 1))
 
-;; Corfu Terminal: Corfu's childframe popup only exists on graphical frames;
-;; this package renders it as an overlay on text frames (`emacs -nw`,
-;; `emacsclient -t`).
-;; -> Loaded UNCONDITIONALLY. The old `:if (not (display-graphic-p))` was
-;;    evaluated once at startup: in a GUI session it never loaded (so
-;;    terminal client frames got no completion popup at all), and under a
-;;    daemon it always loaded. corfu-terminal decides per popup instead —
-;;    with `corfu-terminal-disable-on-gui' (default t), GUI frames keep the
-;;    childframe and only text frames use the overlay fallback.
-(use-package corfu-terminal
-  :after corfu
-  :config
-  (corfu-terminal-mode 1))
+;; Text frames (`emacs -nw`, `emacsclient -t`): Emacs 31 has native
+;; child frames on TTYs (`tty-child-frames'), and Corfu uses them directly,
+;; so the popup works in terminal frames without any extra package.
+;; -> The `corfu-terminal' overlay fallback that used to live here was
+;;    REMOVED with the move to emacs-plus@31: Corfu itself now warns
+;;    "corfu-terminal is not needed on Emacs 31" when it is loaded.
 
 ;; Cape: The "Backends" (Data Sources) for Corfu.
 ;; -> Corfu provides the visual pop-up, but Cape feeds it the actual data.
@@ -360,10 +354,9 @@
   (add-hook 'prog-mode-hook #'jmc-tempel-setup-capf-h)
   (add-hook 'text-mode-hook #'jmc-tempel-setup-capf-h)
 
-  ;; Explicitly activate in Magit commit buffers
-  (add-hook 'git-commit-setup-hook #'jmc-tempel-setup-capf-h)
-
-  ;; Specialized hook for Git commit messages.
+  ;; Git commit messages: `jmc-magit-commit-conventional-h' calls
+  ;; `jmc-tempel-setup-capf-h' itself, so it is NOT added separately here
+  ;; (it used to be, giving the capf two entries in every commit buffer).
   (add-hook 'git-commit-setup-hook #'jmc-magit-commit-conventional-h)
   :config
   ;; Automatically expand a snippet if you type its trigger word followed by SPACE.
@@ -379,15 +372,23 @@
 ;;    lsp-mode is ALWAYS still deferred — so the bridge was never
 ;;    initialized and LSP snippets never reached Tempel.
 ;;    `with-eval-after-load` runs it whenever lsp-mode actually loads.
+;;    (3) Keyed to lsp-mode instead of tempel: tempel is deferred (:bind),
+;;    so `:after tempel' left a window where lsp-mode started its first
+;;    server before the init ran. The init defines the `yas-minor-mode'
+;;    stub lsp-mode checks when advertising snippetSupport (with
+;;    `lsp-enable-snippet' t, lang-server.el), so it must precede that
+;;    first start. Loading this package requires tempel itself.
 (use-package lsp-snippet-tempel
   :ensure (:host github :repo "svaante/lsp-snippet")
-  :after tempel
+  :after lsp-mode
   :config
-  (with-eval-after-load 'lsp-mode
-    (lsp-snippet-tempel-lsp-mode-init)))
+  (lsp-snippet-tempel-lsp-mode-init))
 
 ;; Tempel Collection: A pre-made library of community snippets.
 ;; -> Provides boilerplate snippets for Python, JS, Go, C++, etc., out of the box.
+;; -> Requires Emacs 31.1 since commit 68bc5eb (2026-08-31); on a 30.x
+;;    Emacs, Elpaca refuses it ("Outdated dependency"). Pin `:ref "e833839"`
+;;    (the last pre-bump commit) if this config ever runs on 30 again.
 (use-package tempel-collection
   :after tempel)
 

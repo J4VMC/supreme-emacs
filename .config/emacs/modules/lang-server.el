@@ -40,7 +40,6 @@
 (defvar lsp-ui-doc-include-signature)
 (defvar lsp-ui-doc-position)
 (defvar lsp-language-id-configuration)
-(defvar lsp-tailwindcss-add-on-mode)
 (defvar lsp-tailwindcss-major-modes)
 (defvar lsp-metals-server-args)
 (defvar lsp-metals-show-implicit-arguments)
@@ -112,7 +111,16 @@
   ;; documents the migration and skips the check.
   (lsp-enable-dap-auto-configure nil)
 
-  (lsp-enable-snippet nil)          ; Snippets are routed through Tempel instead.
+  ;; Snippets are expanded by Tempel, via lsp-snippet-tempel (completion.el),
+  ;; which overrides `lsp--expand-snippet'. That bridge only ever sees a
+  ;; snippet if the client ADVERTISES snippet support: with this nil,
+  ;; lsp-mode sends `snippetSupport: false' and servers reply with plain-text
+  ;; completions, so the bridge had nothing to expand. lsp-mode also gates the
+  ;; capability on `(fboundp 'yas-minor-mode)' (warning "Yasnippet is not
+  ;; installed" otherwise); lsp-snippet-tempel-lsp-mode-init defines a stub
+  ;; of that name for exactly this reason, so it must have run before the
+  ;; first server starts -- see the lsp-snippet-tempel block in completion.el.
+  (lsp-enable-snippet t)
 
   ;; **PERFORMANCE**: Disable built-in file watching.
   ;; -> This can be a massive resource hog in large projects.
@@ -213,15 +221,9 @@
   (setq lsp-ui-doc-include-signature t)
   (setq lsp-ui-doc-position 'at-point)) ; Pop up right at the cursor.
 
-;; Consult-LSP: Integrate LSP search with our fuzzy-finding UI.
-(use-package consult-lsp
-  :defer t
-  :after (consult lsp-mode))
-
-;; Treemacs-LSP: Show error icons and health status in the file sidebar.
-(use-package lsp-treemacs
-  :defer t
-  :after (lsp-mode treemacs))
+;; (`consult-lsp' and `lsp-treemacs' were declared here with no bindings and
+;;  no callers. Removed; lsp-treemacs still arrives as a dependency of
+;;  lsp-metals.)
 
 ;; =============================================================================
 ;; LANGUAGE SERVER EXTENSIONS
@@ -254,10 +256,12 @@
   (add-to-list 'lsp-language-id-configuration '(js-ts-mode . "javascript")))
 
 ;; --- TailwindCSS ---
-(use-package lsp-tailwindcss
-  :defer t
-  :init (setq lsp-tailwindcss-add-on-mode t)
-  :config
+;; lsp-mode now SHIPS this client (clients/lsp-tailwindcss.el, listed in
+;; `lsp-client-packages', so it autoloads with lsp-mode). The standalone
+;; `lsp-tailwindcss' package was archived in May 2026 and delisted from
+;; MELPA, and was removed here. `lsp-tailwindcss-add-on-mode' defaults to t
+;; in the bundled client, so only the extra major modes need registering.
+(with-eval-after-load 'lsp-tailwindcss
   (dolist (tw-major-mode
            '(css-mode css-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode js2-mode js-ts-mode clojure-mode))
     (add-to-list 'lsp-tailwindcss-major-modes tw-major-mode)))

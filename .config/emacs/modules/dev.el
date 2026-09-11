@@ -64,14 +64,20 @@
   (magit-todos-mode 1))
 
 ;; =============================================================================
-;; API TESTING (RESTCLIENT)
+;; API TESTING (VERB)
 ;; =============================================================================
+;;
+;; Verb replaces restclient + restclient-test (both archived since March
+;; 2024). Requests live in Org files: headings hold the request text, and
+;; child headings inherit and extend their parent's URL/headers, so one
+;; file describes a whole API. `verb-mode' is a minor mode for Org buffers;
+;; its commands sit behind the `C-c C-r' prefix (`C-c C-r C-r' sends the
+;; request at point, `C-c C-r C-k' kills response buffers).
 
-(use-package restclient
-  :ensure t
-  :mode ("\\.http\\'" . restclient-mode)
+(use-package verb
+  :after org
   :config
-  (use-package restclient-test :ensure t))
+  (define-key org-mode-map (kbd "C-c C-r") verb-command-map))
 
 ;; =============================================================================
 ;; WEB DEVELOPMENT (EMMET)
@@ -79,8 +85,12 @@
 
 (use-package emmet-mode
   :ensure t
+  ;; `.css' opens in `css-ts-mode' (tree.el), which does NOT derive from
+  ;; `css-mode', so a css-mode-only hook never fired for CSS files. `scss-mode'
+  ;; still derives from css-mode and is covered by that entry.
   :hook ((web-mode . emmet-mode)
-         (css-mode . emmet-mode))
+         (css-mode . emmet-mode)
+         (css-ts-mode . emmet-mode))
   :config
   (setq emmet-expand-jsx-className? t))
 
@@ -119,7 +129,9 @@
   (setf (alist-get 'java-ts-mode apheleia-mode-alist) 'google-java-format)
   (setf (alist-get 'python-mode apheleia-mode-alist) '(isort black))
   (setf (alist-get 'python-ts-mode apheleia-mode-alist) '(isort black))
-  (setf (alist-get 'go-mode apheleia-mode-alist) 'goimports)
+  ;; (No go-mode / typescript-mode / js2-mode / json-mode / yaml-mode
+  ;;  entries: those external packages are not installed; the built-in
+  ;;  ts modes below are what those files open in.)
   (setf (alist-get 'go-ts-mode apheleia-mode-alist) 'goimports)
   (setf (alist-get 'rust-ts-mode apheleia-mode-alist) 'rustfmt)
   (setf (alist-get 'scala-ts-mode apheleia-mode-alist) 'scalafmt)
@@ -130,16 +142,12 @@
   (setf (alist-get 'typescript-ts-mode apheleia-mode-alist) 'prettier-typescript)
   (setf (alist-get 'tsx-ts-mode apheleia-mode-alist) 'prettier-typescript)
   (setf (alist-get 'js-ts-mode apheleia-mode-alist) 'prettier-javascript)
-  (setf (alist-get 'typescript-mode apheleia-mode-alist) 'prettier-typescript)
   (setf (alist-get 'js-mode apheleia-mode-alist) 'prettier-javascript)
-  (setf (alist-get 'js2-mode apheleia-mode-alist) 'prettier-javascript)
-  (setf (alist-get 'json-mode apheleia-mode-alist) 'prettier-json)
   (setf (alist-get 'json-ts-mode apheleia-mode-alist) 'prettier-json)
   (setf (alist-get 'css-mode apheleia-mode-alist) 'prettier-css)
   (setf (alist-get 'css-ts-mode apheleia-mode-alist) 'prettier-css)
   (setf (alist-get 'html-mode apheleia-mode-alist) 'prettier-html)
   (setf (alist-get 'web-mode apheleia-mode-alist) 'prettier-html)
-  (setf (alist-get 'yaml-mode apheleia-mode-alist) 'prettier-yaml)
   (setf (alist-get 'yaml-ts-mode apheleia-mode-alist) 'prettier-yaml)
 
   ;; TOML (taplo — `brew install taplo`). NOT prettier: prettier has no
@@ -232,25 +240,35 @@
 ;; FLYCHECK "CHAINING" (THE RELAY RACE)
 ;; =============================================================================
 
+(defun jmc-flycheck-add-next-checker-once (checker next)
+  "Make NEXT run after CHECKER, unless it already does.
+`flycheck-add-next-checker' pushes onto the checker's GLOBAL next-checkers
+list without deduplicating, and `jmc-configure-flycheck-chains' runs from
+`lsp-mode-hook', i.e. once per LSP buffer -- so every new Python buffer
+used to append another `python-flake8' to the `lsp' chain."
+  (unless (member next (mapcar (lambda (n) (if (consp n) (cdr n) n))
+                               (flycheck-get-next-checkers checker)))
+    (flycheck-add-next-checker checker next)))
+
 (defun jmc-configure-flycheck-chains ()
   "Configure secondary linters to run after LSP finishes its primary checks."
   (cond
    ;; Python
    ((derived-mode-p 'python-mode 'python-ts-mode)
-    (flycheck-add-next-checker 'lsp 'python-flake8))
-   ;; Go
-   ((derived-mode-p 'go-mode 'go-ts-mode)
-    (flycheck-add-next-checker 'lsp 'golangci-lint))
+    (jmc-flycheck-add-next-checker-once 'lsp 'python-flake8))
+   ;; Go (go-ts-mode only: the external go-mode package is not installed)
+   ((derived-mode-p 'go-ts-mode)
+    (jmc-flycheck-add-next-checker-once 'lsp 'golangci-lint))
    ;; SQL
    ((derived-mode-p 'sql-mode)
-    (flycheck-add-next-checker 'lsp 'sql-sqlint))
+    (jmc-flycheck-add-next-checker-once 'lsp 'sql-sqlint))
    ;; PHP
    ((derived-mode-p 'php-mode 'php-ts-mode)
-    (flycheck-add-next-checker 'lsp 'phpstan)
-    (flycheck-add-next-checker 'phpstan 'php-phpcs))
+    (jmc-flycheck-add-next-checker-once 'lsp 'phpstan)
+    (jmc-flycheck-add-next-checker-once 'phpstan 'php-phpcs))
    ;; Rust
    ((derived-mode-p 'rustic-mode 'rust-ts-mode 'rust-mode)
-    (flycheck-add-next-checker 'lsp 'rustic-clippy))))
+    (jmc-flycheck-add-next-checker-once 'lsp 'rustic-clippy))))
    ;; (The old Scala branch only called (flycheck-mode 1) — redundant:
    ;;  the prog-mode hook above already enables flycheck everywhere.)
 
@@ -305,26 +323,20 @@
 
 ;; --- Scala ---
 (defun jmc-scala-setup-h ()
-  ;; Disable the buggy indicators that cause the "Node type error"
-  (when (fboundp 'treesit-fold-indicators-mode)
-    (treesit-fold-indicators-mode -1))
-
   ;; Enable Code Lenses specifically for Scala to allow 1-click debugging
   (lsp-lens-mode 1))
 
 (add-hook 'scala-ts-mode-hook #'jmc-scala-setup-h)
 
 ;; =============================================================================
-;; QUICK-RUN & PACKAGE-LINT
+;; QUICK-RUN
 ;; =============================================================================
 
 (use-package quickrun
   :ensure t
   :bind ("s-r" . quickrun))
 
-(use-package package-lint
-  :ensure t
-  :defer t)
+;; (`package-lint' was declared here but never bound or called; removed.)
 
 ;; =============================================================================
 ;; FINALIZE

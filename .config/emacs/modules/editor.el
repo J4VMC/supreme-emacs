@@ -247,11 +247,16 @@ and truename spellings in one anchored alternation."
   (setq indent-bars-treesit-support t))
 
 ;; Highlights semantic keywords like "TODO:", "FIXME:", and "NOTE:" in comments.
+;; -> `:defer 1': the global mode is enabled after one idle second and
+;;    applies to every buffer already open, so there is no reason to load
+;;    the package during startup.
 (use-package hl-todo
-  :init (global-hl-todo-mode))
+  :defer 1
+  :config (global-hl-todo-mode))
 
 ;; Renders `^L` (form feed) characters as clean horizontal divider lines.
 (use-package page-break-lines
+  :defer 1
   :diminish page-break-lines-mode
   :config (global-page-break-lines-mode))
 
@@ -267,11 +272,6 @@ and truename spellings in one anchored alternation."
 ;; EDITING ENHANCEMENTS
 ;; =============================================================================
 
-;; `crux`: A collection of essential utility commands.
-;; -> E.g., `crux-rename-file-and-buffer`, `crux-duplicate-current-line-or-region`.
-(use-package crux
-  :defer t)
-
 ;; `hydra`: pop-up keybinding menus for REPEATABLE command groups — press
 ;; the entry key once, then drive everything with single keys until you
 ;; quit. Declared explicitly because the config now defines three hydras
@@ -286,6 +286,7 @@ and truename spellings in one anchored alternation."
 
 ;; Makes copy/cut commands apply to the *entire current line* if no text is highlighted.
 (use-package whole-line-or-region
+  :defer 1
   :diminish whole-line-or-region-local-mode
   :config (whole-line-or-region-global-mode t))
 
@@ -335,12 +336,6 @@ and truename spellings in one anchored alternation."
 (use-package expreg
   :bind ("M-J" . expreg-expand))
 
-;; `visual-replace`: A cleaner, visual interface for find-and-replace.
-;; -> NOTE: this block used to lack `:ensure t` and was therefore NEVER
-;;    installed. With `use-package-always-ensure` (init.el) it now is.
-(use-package visual-replace
-  :defer t)
-
 ;; `drag-stuff`: Move lines or highlighted regions up/down using `M-up` and `M-down`.
 (use-package drag-stuff
   :defer 1
@@ -355,14 +350,15 @@ and truename spellings in one anchored alternation."
   :bind (("C-c j" . avy-goto-line)      ; Jump to a specific visible line.
          ("s-j"   . avy-goto-char-timer))) ; Jump to any visible character sequence.
 
-;; `rg`: Frontend for `ripgrep` (ultra-fast project search).
-;; -> Integrated with `wgrep` to allow editing search results directly (project-wide replace).
-(use-package rg
+;; `wgrep`: edit grep results in place and write the changes back to the
+;; files (project-wide replace). Project search itself is `consult-ripgrep'
+;; on `M-s r' (completion.el); `embark-export' turns its results into a
+;; grep buffer, which wgrep makes editable. (The `rg' package that used to
+;; carry this setting had no binding and was never invoked; removed.)
+(use-package wgrep
   :defer t
-  :after transient
-  :config
-  (setq wgrep-auto-save-buffer t)
-  (add-hook 'rg-mode-hook 'wgrep-rg-setup))
+  :custom
+  (wgrep-auto-save-buffer t))
 
 ;; `vundo`: Visual Undo Tree.
 ;; -> Displays your undo history as a branching tree, allowing you to easily
@@ -408,10 +404,6 @@ and truename spellings in one anchored alternation."
 ;; `post-command-hook' after every single command. `C-r' still runs the
 ;; stock `isearch-backward' as an escape hatch: occurrence-granular,
 ;; and — unlike minibuffer-based search — usable inside keyboard macros.
-
-;; `dash` & `s`: Essential List and String manipulation libraries for Emacs Lisp.
-(use-package dash)
-(use-package s)
 
 ;; `evil-nerd-commenter`: Rapid code commenting/uncommenting (e.g., via `M-/`).
 (use-package evil-nerd-commenter

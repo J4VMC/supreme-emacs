@@ -78,7 +78,12 @@
 ;; This improves readability in code without changing the underlying text.
 
 
+;; -> `:defer 1': `global-ligature-mode' is a globalized minor mode, so
+;;    enabling it after one idle second still covers every buffer already
+;;    open, and the (large) `rx' ligature table is compiled off the startup
+;;    path.
 (use-package ligature
+  :defer 1
   :config
   ;; Enable the "www" ligature universally.
   (ligature-set-ligatures 't '("www"))
@@ -201,11 +206,9 @@
 (setq use-dialog-box nil)
 (setq use-file-dialog nil)
 
-;; Enable pixel-perfect smooth scrolling (Emacs 29+).
+;; Enable pixel-perfect smooth scrolling.
 ;; -> Provides a smoother, more modern scrolling experience.
-;; -> Wrapped in a version check to avoid errors on older Emacs versions.
-(when (>= emacs-major-version 29)
-  (pixel-scroll-precision-mode 1))
+(pixel-scroll-precision-mode 1)
 
 ;; Enable right-click context menus.
 ;; -> Provides familiar GUI-style interactions.
@@ -331,7 +334,7 @@
          (conf-mode . diff-hl-mode))
   :custom
   ;; Use the RIGHT fringe: the left one is already contested by flycheck's
-  ;; error indicators and treesit-fold's fold markers.
+  ;; error indicators and hideshow's fold indicators.
   (diff-hl-side 'right)
   :config
   ;; Update markers live as you type, not only after saving.
@@ -343,8 +346,10 @@
 ;; Preview color values inline.
 ;; -> Displays a color swatch next to hex codes like "#FFFFFF".
 ;; -> FIXED: same inert-package bug — `:defer t` with only `:config` meant the
-;;    package never loaded and `global-colorful-mode` never ran.
+;;    package never loaded and `global-colorful-mode` never ran. `:defer 1'
+;;    is different: an idle timer loads it one second after startup.
 (use-package colorful-mode
+  :defer 1
   :diminish
   :custom
   (colorful-use-prefix t)
@@ -592,7 +597,9 @@ always wins over whatever the theme set on `mode-line'."
 ;; -> Reduces visual clutter when working with multiple splits.
 ;; -> FIXED: the old block was `:defer t` with nothing to trigger loading, and
 ;;    `(setq dimmer-mode t)` only set a variable — dimmer never activated.
+;;    `:defer 1' is different: an idle timer loads it one second after startup.
 (use-package dimmer
+  :defer 1
   :config
   ;; Never dim the Corfu completion child frame.
   ;; -> Its window is technically "not selected" while you complete, so
