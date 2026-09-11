@@ -284,11 +284,14 @@ brew install mongosh redis
 #### DevOps (Docker & Terraform)
 
 ```bash
-# Install Docker Desktop for Mac
-# Download from: https://desktop.docker.com/mac/main/arm64/Docker.dmg
+# Docker: the CLI, compose and colima (the VM runtime) all come from the
+# dotfiles Brewfile, on Intel and Apple silicon alike. There is no Docker
+# Desktop. `docker compose` needs the one-off cliPluginsExtraDirs step
+# described in the dotfiles README.
+brew install docker docker-compose colima
 
-# Install Docker & Terraform tooling
-brew install hadolint terraform
+# Linting and Terraform
+brew install hadolint hashicorp/tap/terraform
 ```
 
 ---
