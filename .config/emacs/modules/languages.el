@@ -25,10 +25,13 @@
 ;; Most languages here use a standard "stack" of features:
 ;; 1.  `lsp-deferred`: Starts the **Language Server Protocol** client (code
 ;;     completion, "jump to definition") only when the file is actually visible.
-;; 2.  `apheleia-mode`: Enables **Auto-Formatting**. Your code is automatically
-;;     tidied (using tools like `prettier` or `black`) every time you save.
-;; 3.  `flycheck-mode`: Enables **Real-time Syntax Checking**. Errors are
+;; 2.  `flycheck-mode`: Enables **Real-time Syntax Checking**. Errors are
 ;;     highlighted with red underlines as you type.
+;;
+;; Auto-formatting on save is NOT hooked per language: dev.el turns on
+;; `apheleia-global-mode', which formats any buffer whose major mode has an
+;; entry in `apheleia-mode-alist' (also dev.el). The former per-mode
+;; `apheleia-mode' hook entries here were all redundant with that.
 ;;
 ;;; Code:
 
@@ -81,8 +84,7 @@
 (use-package java-ts-mode
   :ensure nil ; Built-in
   :mode ("\\.java\\'" . java-ts-mode)
-  :hook ((java-ts-mode . lsp-deferred)
-         (java-ts-mode . apheleia-mode)))
+  :hook ((java-ts-mode . lsp-deferred)))
 
 ;; =============================================================================
 ;; PHP
@@ -105,8 +107,7 @@
   :mode (("\\.php\\'" . php-ts-mode)
          ("\\.phtml\\'" . php-ts-mode)
          ("\\.php[3-7]\\'" . php-ts-mode))
-  :hook ((php-ts-mode . lsp-deferred)
-         (php-ts-mode . apheleia-mode)))
+  :hook ((php-ts-mode . lsp-deferred)))
 
 ;; --- PHP Utilities ---
 
@@ -141,13 +142,10 @@
   (setq typescript-ts-mode-indent-offset 2 ; typescript-ts-mode & tsx-ts-mode
         js-indent-level 2)                 ; js-ts-mode
   :hook ((typescript-ts-mode . lsp-deferred)
-         (typescript-ts-mode . apheleia-mode)
 
          (tsx-ts-mode . lsp-deferred)
-         (tsx-ts-mode . apheleia-mode)
 
          (js-ts-mode . lsp-deferred)
-         (js-ts-mode . apheleia-mode)
 
          ;; Force spaces instead of tabs, and set display width to 2.
          (typescript-ts-mode . (lambda () (setq-local indent-tabs-mode nil tab-width 2)))
@@ -173,19 +171,16 @@
   :mode (("\\.html?\\'" . web-mode)
          ("\\.twig\\'" . web-mode))
   :hook ((web-mode . lsp-deferred)
-         (web-mode . apheleia-mode)
          (web-mode . (lambda () (setq-local indent-tabs-mode nil)))
 
          ;; --- SVELTE HOOKS ---
          (svelte-mode . lsp-deferred)
-         (svelte-mode . apheleia-mode)
          (svelte-mode . (lambda ()
                           (setq-local indent-tabs-mode nil)
                           (setq-local lsp-disabled-clients (append lsp-disabled-clients '(eslint)))))
 
          ;; --- VUE HOOKS ---
          (vue-mode . lsp-deferred)
-         (vue-mode . apheleia-mode)
          (vue-mode . (lambda () (setq-local indent-tabs-mode nil))))
   :config
   ;; Force web-mode to detect engines based on file extensions
@@ -198,6 +193,17 @@
         web-mode-css-indent-offset 2
         web-mode-code-indent-offset 2))
 
+;; CSS / SCSS: `.css' opens in the built-in `css-ts-mode' (tree.el remaps
+;; css-mode to it), `.scss' in the built-in `scss-mode'. Both get
+;; vscode-css-language-server from vscode-langservers-extracted
+;; (npm/.npm-globals); formatting comes from apheleia-global-mode.
+;; -> `css-ts-mode' derives from css-base-mode, NOT css-mode, so it needs its
+;;    own hook entry -- a css-mode hook alone never fires for .css files.
+(use-package css-mode
+  :ensure nil
+  :hook ((css-ts-mode . lsp-deferred)
+         (scss-mode . lsp-deferred)))
+
 ;; =============================================================================
 ;; PYTHON
 ;; =============================================================================
@@ -206,7 +212,6 @@
   :ensure nil
   :mode ("\\.py\\'" . python-ts-mode)
   :hook ((python-ts-mode . lsp-deferred)
-         (python-ts-mode . apheleia-mode)
 
          ;; Formatting
          (python-ts-mode . (lambda ()
@@ -285,12 +290,16 @@
   :after python
   :commands (python-pytest-dispatch python-pytest-file python-pytest-function))
 
-;; Django: Enable specialized features if `manage.py` is present.
+;; Django: `python-django-open-project' gives a project dashboard (manage.py
+;; commands, apps, settings) in its own buffer.
+;; -> `python-django-mode' is that dashboard's MAJOR mode (derived from
+;;    special-mode), not a minor mode. The old hook called it with an
+;;    argument from every python-ts-mode buffer under a manage.py, which
+;;    signalled wrong-number-of-arguments and aborted the remaining hooks
+;;    (lsp, apheleia, pyvenv) for that buffer. There is nothing to enable
+;;    per buffer; the command is simply made available on demand.
 (use-package python-django
-  :defer t
-  :hook ((python-ts-mode . (lambda ()
-                             (when (locate-dominating-file default-directory "manage.py")
-                               (python-django-mode 1))))))
+  :commands (python-django-open-project))
 
 ;; =============================================================================
 ;; MODERN FRAMEWORKS & LANGUAGES (GO, SWIFT)
@@ -311,7 +320,6 @@
   :ensure nil ; Built-in
   :mode ("\\.go\\'" . go-ts-mode)
   :hook ((go-ts-mode . lsp-deferred)
-         (go-ts-mode . apheleia-mode)
          ;; gopls also understands `go.mod` files: dependency diagnostics,
          ;; "upgrade dependency" code actions, hover docs on modules.
          ;; Emacs's built-in go-ts-mode.el maps go.mod -> go-mod-ts-mode,
@@ -325,8 +333,7 @@
 ;;    package does NOT define it, so `.swift` files errored on open.
 (use-package swift-ts-mode
   :mode ("\\.swift\\'" . swift-ts-mode)
-  :hook ((swift-ts-mode . lsp-deferred)
-         (swift-ts-mode . apheleia-mode)))
+  :hook ((swift-ts-mode . lsp-deferred)))
 
 ;; =============================================================================
 ;; RUST (VIA RUSTIC)
@@ -334,8 +341,7 @@
 
 (use-package rustic
   :mode ("\\.rs\\'" . rustic-mode)
-  :hook ((rustic-mode . lsp-deferred)
-         (rustic-mode . apheleia-mode))
+  :hook ((rustic-mode . lsp-deferred))
   :bind (:map rustic-mode-map
               ("C-c C-c l" . flycheck-list-errors)
               ("C-c C-c a" . lsp-execute-code-action)
@@ -383,8 +389,7 @@
 
 (use-package scala-ts-mode
   :mode ("\\.scala\\'" . scala-ts-mode)
-  :hook ((scala-ts-mode . lsp-deferred)
-         (scala-ts-mode . apheleia-mode)))
+  :hook ((scala-ts-mode . lsp-deferred)))
 
 ;; SBT: Scala Build Tool integration.
 ;; -> NOTE: this block used to lack `:ensure t` and was therefore NEVER
@@ -424,7 +429,6 @@
 (use-package sql
   :ensure nil ; Built-in
   :mode ("\\.sql\\'" . sql-mode)
-  :hook (sql-mode . apheleia-mode)
   :bind (:map sql-mode-map ("C-c C-d" . sql-connect))
   :config
   (setq sql-product 'postgres))
@@ -449,28 +453,25 @@
 ;; -> The `yaml-mode' and `json-mode' packages previously declared here
 ;;    never loaded (same dead-weight pattern as php-mode/go-mode: files
 ;;    map to the built-in ts modes, hooks come from other packages).
-;;    json-mode is gone entirely; yaml-mode still gets installed as a
-;;    DEPENDENCY of docker-compose-mode below, just no longer declared.
+;;    Both are gone entirely (yaml-mode lingered as a dependency of
+;;    docker-compose-mode until that package was removed too).
 (use-package yaml-ts-mode
   :ensure nil ; Built-in
   :mode ("\\.ya?ml\\'" . yaml-ts-mode)
-  :hook ((yaml-ts-mode . lsp-deferred)
-         (yaml-ts-mode . apheleia-mode)))
+  :hook ((yaml-ts-mode . lsp-deferred)))
 
 (use-package json-ts-mode
   :ensure nil ; Built-in
   :mode ("\\.json\\'" . json-ts-mode)
-  :hook ((json-ts-mode . lsp-deferred)
-         (json-ts-mode . apheleia-mode)))
+  :hook ((json-ts-mode . lsp-deferred)))
 
 ;; TOML: `toml-ts-mode` is BUILT INTO Emacs 29+. Without this mapping,
 ;; `.toml` files fall back to the regex-based `conf-toml-mode` — the toml
-;; grammar is already in `treesit-auto-langs' (tree.el), so the ts mode
-;; just needed wiring up. Formatting runs through taplo (see dev.el).
+;; grammar installs on demand (`treesit-auto-install-grammar', tree.el), so
+;; the ts mode just needed wiring up. Formatting runs through taplo (see dev.el).
 (use-package toml-ts-mode
   :ensure nil ; Built-in
-  :mode ("\\.toml\\'" . toml-ts-mode)
-  :hook (toml-ts-mode . apheleia-mode))
+  :mode ("\\.toml\\'" . toml-ts-mode))
 
 (use-package csv-mode
   :mode ("\\.csv\\'" . csv-mode)
@@ -491,11 +492,15 @@
 ;; DOCKER & CONTAINERS
 ;; =============================================================================
 
-(use-package dockerfile-mode
-  :mode "Dockerfile\\'")
-
-(use-package docker-compose-mode
-  :mode "compose.*\\.ya?ml\\'")
+;; `dockerfile-ts-mode' is BUILT INTO Emacs 29+; the external `dockerfile-mode'
+;; package was removed. Compose files are plain YAML and open in
+;; `yaml-ts-mode' (below), where the YAML language server provides
+;; schema-aware completion, so the archived, MELPA-delisted
+;; `docker-compose-mode' package was removed as well.
+(use-package dockerfile-ts-mode
+  :ensure nil ; Built-in
+  :mode (("Dockerfile\\(?:\\..*\\)?\\'" . dockerfile-ts-mode)
+         ("\\.[Dd]ockerfile\\'" . dockerfile-ts-mode)))
 
 ;; Management UI for Docker containers and images.
 ;; -> MOVED from `C-c d` to `C-c D`: `C-c d` is the dape debugger prefix
@@ -515,8 +520,7 @@
 (use-package markdown-mode
   :mode (("\\.md\\'" . markdown-mode)
          ("\\.markdown\\'" . markdown-mode))
-  :hook ((markdown-mode . flycheck-mode)
-         (markdown-mode . apheleia-mode))
+  :hook ((markdown-mode . flycheck-mode))
   :preface
   ;; --- Preview Engine ---
 
@@ -599,8 +603,7 @@ the preview."
   :mode (("\\.tf\\'" . terraform-mode)
          ("\\.tfvars\\'" . terraform-mode))
   ;; Boot up the language server and auto-formatter
-  :hook ((terraform-mode . lsp-deferred)
-         (terraform-mode . apheleia-mode)))
+  :hook ((terraform-mode . lsp-deferred)))
 
 (use-package supreme-dotenv
   :ensure (:host github :repo "J4VMC/supreme-dotenv"))
@@ -612,8 +615,7 @@ the preview."
 ;; Provides syntax highlighting and indentation for .fish script files.
 ;; -> Useful if you use Fish as your interactive shell (configured below).
 (use-package fish-mode
-  :mode "\\.fish\\'"
-  :hook (fish-mode . apheleia-mode))
+  :mode "\\.fish\\'")
 
 ;; Provides modern Tree-sitter syntax highlighting and LSP integration for shell scripts.
 ;; -> Requires `bash-language-server`, `shellcheck`, and `shfmt` installed on your OS.
@@ -623,8 +625,7 @@ the preview."
          ("\\.bash\\'" . bash-ts-mode)
          ("bashrc\\'" . bash-ts-mode)
          ("zshrc\\'" . bash-ts-mode))
-  :hook ((bash-ts-mode . lsp-deferred)
-         (bash-ts-mode . apheleia-mode))
+  :hook ((bash-ts-mode . lsp-deferred))
   :config
   (setq sh-basic-offset 4))
 

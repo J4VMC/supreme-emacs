@@ -28,60 +28,83 @@
 ;; =============================================================================
 
 (defvar combobulate-key-prefix)
-(defvar treesit-fold-mode-map)
-
-(declare-function global-treesit-auto-mode "treesit-auto")
-(declare-function global-treesit-fold-mode "treesit-fold")
-(declare-function global-treesit-fold-indicators-mode "treesit-fold-indicators")
-(declare-function treesit-fold-toggle "treesit-fold")
 
 ;; =============================================================================
 ;; CORE TREE-SITTER SETUP (TREESIT)
 ;; =============================================================================
+;;
+;; Emacs 31 made two external packages redundant here, and both were REMOVED
+;; with the move to emacs-plus@31:
+;;   * `treesit-auto'  -> `treesit-auto-install-grammar' + `treesit-enabled-modes'
+;;   * `treesit-fold'  -> hideshow, which now folds tree-sitter blocks natively
+;;                        (see CODE FOLDING below).
 
 (use-package treesit
   ;; `:ensure nil` because `treesit` is a built-in feature of Emacs 29+.
   :ensure nil
-  :config
+  :custom
   ;; Set the font-lock level to the maximum (4).
   ;; -> Level 4 provides the most granular and colorful syntax highlighting.
-  (setq treesit-font-lock-level 4))
+  (treesit-font-lock-level 4)
 
-(use-package treesit-auto
-  :custom
-  ;; Ask before installing a missing grammar instead of installing silently.
-  ;; -> `t` performed a SYNCHRONOUS git-clone + C-compile the moment a file
-  ;;    with a missing grammar was opened, freezing Emacs for ~10s. Worse:
-  ;;    a grammar whose install FAILS is never recorded as present, so the
-  ;;    whole clone+compile was retried on EVERY file visit — the recurring
-  ;;    freeze. With 'prompt you get a visible yes/no instead, and the
-  ;;    prompt names the grammar, which identifies a failing one instantly.
-  ;; -> Install everything up front in ONE supervised batch with
-  ;;    `M-x treesit-auto-install-all` (plus `M-x php-ts-mode-install-parsers`
-  ;;    for PHP's multi-grammar set), then day-to-day opens never block.
-  (treesit-auto-install 'prompt)
+  ;; --- Grammar installation ---
+  ;; Ask before installing a missing grammar instead of installing silently:
+  ;; a silent install was a SYNCHRONOUS git-clone + C-compile the moment a
+  ;; file was opened (~10s freeze), and a grammar whose build FAILS is never
+  ;; recorded as present, so it was retried on EVERY visit. With 'ask you get
+  ;; a visible yes/no naming the grammar, which identifies a failing one
+  ;; instantly. Every built-in ts mode registers its own PINNED recipe in
+  ;; `treesit-language-source-alist' when it loads, so no URL list is kept
+  ;; here. Install everything up front with `jmc-treesit-install-all-grammars'
+  ;; (below), then day-to-day opens never block.
+  (treesit-auto-install-grammar 'ask)
 
-  ;; Only manage grammars for languages this config actually uses.
-  ;; -> The default list covers dozens of languages, including several with
-  ;;    historically flaky grammar builds (latex, markdown, org). Pinning
-  ;;    shrinks the failure surface and makes `treesit-auto-install-all`
-  ;;    fast. If a grammar from this list keeps failing to build, remove it
-  ;;    here and fall back to the non-ts mode for that language.
-  (treesit-auto-langs '(python javascript typescript tsx go gomod rust php
-                               java scala bash css html json yaml toml dockerfile))
+  ;; --- Mode remapping ---
+  ;; languages.el maps every file extension to its ts mode explicitly; this
+  ;; list covers the remaining paths where Emacs would still pick the legacy
+  ;; mode (a shebang or mode cookie selecting `sh-mode'/`python-mode', a
+  ;; `css-mode' buffer created by another package, ...) and lets the ts
+  ;; modes' `*-ts-mode-maybe' autoloads offer a grammar install.
+  ;; -> Deliberately a list, NOT t: `.rs' stays with rustic-mode and `.html'
+  ;;    with web-mode (both decided in languages.el).
+  (treesit-enabled-modes '(bash-ts-mode css-ts-mode dockerfile-ts-mode
+                           go-ts-mode go-mod-ts-mode java-ts-mode js-ts-mode
+                           json-ts-mode php-ts-mode python-ts-mode toml-ts-mode
+                           tsx-ts-mode typescript-ts-mode yaml-ts-mode))
   :config
-  ;; THE MISSING ACTIVATION: `treesit-auto-install` is only *consulted* by
-  ;; this globalized mode — without it the package did nothing at all, and
-  ;; grammars only existed because they had been installed manually at some
-  ;; point. With the mode on, opening a file whose grammar is missing
-  ;; installs it automatically.
-  ;;
-  ;; NOTE: we deliberately do NOT call `treesit-auto-add-to-auto-mode-alist`.
-  ;; languages.el manages `auto-mode-alist` explicitly, including choices
-  ;; that differ from treesit-auto's defaults (e.g. `.rs` -> rustic-mode).
-  ;; Letting treesit-auto mass-register its own mappings would risk
-  ;; shadowing those decisions.
-  (global-treesit-auto-mode))
+  ;; scala-ts-mode (external, languages.el) registers no grammar recipe of
+  ;; its own; this is the one treesit-auto used to carry for it.
+  (add-to-list 'treesit-language-source-alist
+               '(scala "https://github.com/tree-sitter/tree-sitter-scala"))
+  ;; swift-ts-mode (external) registers none either. Only this branch of the
+  ;; grammar repo carries the generated parser.c; main needs a JS toolchain.
+  (add-to-list 'treesit-language-source-alist
+               '(swift "https://github.com/alex-pinkus/tree-sitter-swift"
+                       :revision "with-generated-files"))
+  ;; ...and, being external, it is not a candidate for `treesit-enabled-modes'
+  ;; either. This remap is needed: sbt-mode pulls in the legacy scala-mode,
+  ;; whose autoload claims `.scala' AFTER languages.el's mapping ran (Elpaca
+  ;; activates packages after init), so without it Scala files opened in
+  ;; scala-mode. treesit-auto used to add exactly this entry.
+  (add-to-list 'major-mode-remap-alist '(scala-mode . scala-ts-mode)))
+
+(defun jmc-treesit-install-all-grammars ()
+  "Install every grammar this config uses that is not installed yet.
+One supervised batch, the replacement for `treesit-auto-install-all'.
+The mode libraries are loaded first so their pinned recipes are present
+in `treesit-language-source-alist'. PHP needs several grammars; its mode
+registers all of them."
+  (interactive)
+  (dolist (lib '(sh-script css-mode dockerfile-ts-mode go-ts-mode java-ts-mode
+                 js json-ts-mode php-ts-mode python toml-ts-mode
+                 typescript-ts-mode yaml-ts-mode))
+    (require lib))
+  (dolist (lang (mapcar #'car treesit-language-source-alist))
+    (if (treesit-language-available-p lang)
+        (message "treesit: %s already installed" lang)
+      (message "treesit: installing %s..." lang)
+      (treesit-install-language-grammar lang)))
+  (message "treesit: all grammars present."))
 
 ;; ===========================================================================
 ;; COMBOBULATE (STRUCTURAL EDITING)
@@ -110,40 +133,34 @@
   (setq combobulate-key-prefix "C-c o"))
 
 ;; =============================================================================
-;; TREE-SITTER CODE FOLDING
+;; CODE FOLDING (HIDESHOW)
 ;; =============================================================================
 ;;
-;; Allows you to collapse and expand code blocks (functions, classes, loops)
-;; based on their actual syntax rather than just indentation levels.
-;;
-;; FIXED (two bugs in one):
-;; 1. `treesit-fold-mode` was never enabled in any buffer, and a mode's keymap
-;;    is inert while the mode is off — so the `s-<backspace>` binding (and
-;;    folding in general) never worked. `global-treesit-fold-mode` fixes that.
-;; 2. `treesit-fold` and `treesit-fold-indicators` were declared as two
-;;    separate Elpaca packages built from the SAME repository, which makes
-;;    Elpaca clone/build the repo twice under two names. The indicators
-;;    library ships inside the treesit-fold repo, so one package declaration
-;;    covers both.
+;; Collapse and expand code blocks (functions, classes, loops) by their actual
+;; syntax. Emacs 31's hideshow folds the tree-sitter `list' thing natively in
+;; every ts mode and gained fringe indicators, `hs-cycle' and `hs-toggle-all',
+;; so the external `treesit-fold' package (plus its indicators library, and the
+;; Scala per-buffer workaround in dev.el that disabled those indicators) was
+;; REMOVED with the move to emacs-plus@31.
 
-(use-package treesit-fold
-  :ensure (:host github :repo "emacs-tree-sitter/treesit-fold")
-  :config
-  ;; Enable folding in every tree-sitter-capable buffer.
-  (global-treesit-fold-mode 1)
+(defun jmc-hs-enable-h ()
+  "Turn on `hs-minor-mode', tolerating major modes hideshow cannot handle."
+  (condition-case err
+      (hs-minor-mode 1)
+    (error (message "hideshow: %s" (error-message-string err)))))
 
-  ;; Bind Super + Backspace to toggle the fold at the current cursor position.
-  ;; -> Defined here, AFTER the package loads, so the keymap exists.
-  (define-key treesit-fold-mode-map (kbd "s-<backspace>") #'treesit-fold-toggle)
-
-  ;; Visual indicators (like a `+` sign) in the left fringe for foldable and
-  ;; folded blocks. Same repo, separate library.
-  ;; -> NOTE: dev.el intentionally disables `treesit-fold-indicators-mode`
-  ;;    per-buffer in Scala (`jmc-scala-setup-h`) to work around a node-type
-  ;;    error; that per-buffer opt-out continues to work with the global
-  ;;    mode enabled here.
-  (require 'treesit-fold-indicators)
-  (global-treesit-fold-indicators-mode 1))
+(use-package hideshow
+  :ensure nil ; Built-in
+  :diminish hs-minor-mode
+  :hook (prog-mode . jmc-hs-enable-h)
+  :custom
+  ;; Clickable +/- markers in the LEFT fringe for foldable and folded blocks.
+  (hs-show-indicators t)
+  ;; Show "N lines" next to the ellipsis of a folded block.
+  (hs-display-lines-hidden t)
+  ;; Super + Backspace toggles the fold at point (same key as before).
+  :bind (:map hs-minor-mode-map
+              ("s-<backspace>" . hs-toggle-hiding)))
 
 ;; =============================================================================
 ;; FINALIZE

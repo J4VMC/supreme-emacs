@@ -52,7 +52,8 @@
 ;; Temporarily increase the memory threshold before Emacs pauses to clean up.
 ;; -> A high threshold (100MB) means Emacs won't pause for GC during startup,
 ;;    drastically reducing load times.
-;; -> Note: This must be reset to a normal value in `init.el` to avoid memory leaks.
+;; -> After startup, `gcmh' (init.el) owns the threshold: it keeps it high
+;;    while you type and lowers it on idle. Nothing resets it by hand.
 (setq gc-cons-threshold 100000000) ; 100MB
 
 ;; --- Inter-Process Communication (IPC) ---

@@ -10,9 +10,9 @@
 ;; web browser (`eww`).
 ;;
 ;; Usage:
-;; 1. `M-x my/install-missing-docsets`   -> Downloads all mapped docsets.
-;; 2. `M-x my/install-docsets-for-mode`  -> Downloads docsets ONLY for the current language.
-;; 3. `M-x my/list-installed-docsets`    -> View what is currently installed.
+;; 1. `M-x jmc-docset-install-missing`   -> Downloads all mapped docsets.
+;; 2. `M-x jmc-docset-install-for-mode`  -> Downloads docsets ONLY for the current language.
+;; 3. `M-x jmc-docset-list`              -> View what is currently installed.
 ;; 4. `M-s d`                            -> Search docs for the word under the cursor.
 ;;
 ;;; Code:
@@ -66,8 +66,9 @@
     (css-mode            . ("CSS" "Bootstrap" "Tailwind_CSS"))
     (css-ts-mode         . ("CSS" "Bootstrap" "Tailwind_CSS"))
     
-    (dockerfile-mode     . ("Docker" "Kubernetes"))
-    (docker-compose-mode . ("Docker" "Kubernetes"))
+    (dockerfile-ts-mode  . ("Docker" "Kubernetes"))
+    ;; Compose files and Kubernetes manifests both open in yaml-ts-mode.
+    (yaml-ts-mode        . ("Docker" "Kubernetes"))
     (terraform-mode      . ("Terraform"))
     
     (sql-mode            . ("PostgreSQL" "SQL"))
@@ -308,7 +309,7 @@ For example, you can pass \"Python 3\" as the NAME."
   (add-to-list 'embark-keymap-alist '(consult-dash . embark-dash-map)))
 
 ;; Add a convenient shortcut to LSP-mode's command map.
-;; -> Allows you to press `s-l d` (or however you invoke the LSP map) to search docs.
+;; -> Allows you to press `C-c l d` (`lsp-keymap-prefix', lang-server.el) to search docs.
 (with-eval-after-load 'lsp-mode
   (when (boundp 'lsp-command-map)
     (define-key lsp-command-map (kbd "d") #'consult-dash)))

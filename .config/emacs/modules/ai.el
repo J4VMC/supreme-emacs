@@ -138,12 +138,8 @@
 ;; First `C-c g` prompts for Google authentication in the shell buffer.
 ;;
 ;; All three packages (shell-maker, acp, agent-shell) come from MELPA via
-;; the normal Elpaca dependency resolution — no GitHub recipes needed.
-
-;; acp.el: the Agent Client Protocol implementation agent-shell is built on.
-;; Declared explicitly (it's also a hard dependency) so it's easy to pin.
-(use-package acp
-  :defer t)
+;; the normal Elpaca dependency resolution — no GitHub recipes needed, and
+;; only agent-shell is declared (acp and shell-maker are its dependencies).
 
 (use-package agent-shell
   :defer t

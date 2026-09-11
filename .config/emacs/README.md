@@ -1,4 +1,4 @@
-# Emacs 30 Configuration for macOS
+# Emacs 31 Configuration for macOS
 
 A modern, IDE-like Emacs configuration for software development. This setup provides an experience similar to VS Code or Cursor — including an integrated AI coding agent — but runs entirely in Emacs.
 
@@ -35,7 +35,7 @@ This configuration assumes the **fish shell**. Most commands below are written f
 
 ```bash
 brew tap d12frosted/emacs-plus
-brew install emacs-plus --HEAD --with-debug --with-xwidgets --with-dbus --with-mailutils --with-ctags --with-imagemagick
+brew install emacs-plus@31 --with-compress-install --with-dbus --with-debug --with-mailutils --with-xwidgets
 ```
 
 Verify the installation:
@@ -44,7 +44,7 @@ Verify the installation:
 emacs --version
 ```
 
-You should see "GNU Emacs 30.2" or similar.
+You should see "GNU Emacs 31.1" or similar.
 
 ### Step 2: Install the Fonts (Required)
 
@@ -64,7 +64,7 @@ mv ~/.config/emacs ~/.config/emacs.backup
 mv ~/.emacs.d ~/.emacs.d.backup
 ```
 
-Clone and set up this configuration:
+This configuration is normally installed as the `emacs` submodule of the [dotfiles](https://github.com/J4VMC/supreme-dotfiles) repository, where `stow emacs` links it to `~/.config/emacs` (and the Brewfile there installs everything in the steps above). To use it on its own instead:
 
 ```bash
 git clone git@github.com:J4VMC/supreme-emacs.git ~/.config/emacs
@@ -313,7 +313,7 @@ brew install taplo
 This configuration integrates [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), Anthropic's coding agent, directly into Emacs.
 
 ```bash
-npm install -g @anthropic-ai/claude-code
+brew install --cask claude-code   # Homebrew only -- never via npm (see ~/dotfiles/npm/.npm-globals)
 claude   # run once in a terminal to log in
 ```
 
@@ -339,7 +339,7 @@ emacs
 2. You'll land on a welcome screen listing your recent files and projects. Everything on it is keyboard-driven: move between items with `TAB` / `S-TAB` or the arrow keys and press `RET` to open (the mouse works too), or use the action keys — `f` find a file, `r` search all recent files, `p` open any project, `e` open this configuration as a project. `d` forgets the item under point (removes it from the list — nothing on disk; forgotten projects also stay out of auto-discovery). Wherever you are, `s-p h` brings the screen back.
 3. Emacs may ask to update packages (answer `y` or `n`).
 4. When you open a code file for a language whose syntax grammar isn't installed yet, Emacs **asks permission** to install it. Answer `y` — it takes a few seconds, once per language.
-    - Prefer to get it all over with at once? Run `M-x treesit-auto-install-all` and grab a coffee.
+    - Prefer to get it all over with at once? Run `M-x jmc-treesit-install-all-grammars` and grab a coffee.
 
 **Package updates & reproducibility:** packages auto-update in the background at most once a week. Once your setup works the way you like, run `M-x jmc-elpaca-write-lock` and commit the generated `elpaca.lock` file — from then on, every machine installs **exactly** those package versions, and automatic updates switch off. To update after that, run `M-x jmc-elpaca-update-unlocked` deliberately, verify everything still works, then re-run `M-x jmc-elpaca-write-lock`.
 

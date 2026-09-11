@@ -1,0 +1,5 @@
+# elpaca.lock is written by M-x jmc-elpaca-write-lock (see init.el). The
+# "elpaca-lock" diff driver in ~/.gitconfig puts the package name in hunk
+# headers. This file must live in this repository: attributes in the dotfiles
+# superproject do not apply inside a submodule.
+elpaca.lock diff=elpaca-lock
