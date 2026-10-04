@@ -86,7 +86,12 @@
   ;; whose autoload claims `.scala' AFTER languages.el's mapping ran (Elpaca
   ;; activates packages after init), so without it Scala files opened in
   ;; scala-mode. treesit-auto used to add exactly this entry.
-  (add-to-list 'major-mode-remap-alist '(scala-mode . scala-ts-mode)))
+  (add-to-list 'major-mode-remap-alist '(scala-mode . scala-ts-mode))
+  ;; hcl-ts-mode (used by terraform-mode) registers no recipe. The upstream
+  ;; grammar moved from nickel-lang/tree-sitter-hcl (404) to the canonical
+  ;; tree-sitter-grammars org.
+  (add-to-list 'treesit-language-source-alist
+               '(hcl "https://github.com/tree-sitter-grammars/tree-sitter-hcl")))
 
 (defun jmc-treesit-install-all-grammars ()
   "Install every grammar this config uses that is not installed yet.
