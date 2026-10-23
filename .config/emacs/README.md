@@ -29,6 +29,10 @@ You need macOS and Homebrew installed. If you don't have Homebrew:
 
 This configuration assumes the **fish shell**. Most commands below are written for fish.
 
+**If you are installing through the [dotfiles](https://github.com/J4VMC/supreme-dotfiles)** (the normal way), Steps 1, 2, 4, 5 and 6 below are already covered: every Homebrew package comes from the Brewfile (`brew bundle --global`), every npm package from the `~/.npm-globals` manifest (`npm-globals install`), the Go tools from the Brewfile's `go "..."` entries, and the shell hooks (direnv, pyenv, nvm) from the fish configuration. Read those steps to learn what each tool is for; run the commands only on a standalone install.
+
+**Keyboard:** the bindings in this configuration lean on **Control**, and they assume Caps Lock is remapped to Control when held and Escape when tapped. That remap comes from [Karabiner-Elements](https://karabiner-elements.pqrs.org/) (`brew install --cask karabiner-elements`, then enable the predefined rule *"Change caps_lock to control if pressed with other keys, to escape if pressed alone"* under Complex Modifications). Without it every `C-` chord means reaching for the bottom-left corner. The dotfiles README has the full Karabiner step, including the macOS permissions it needs.
+
 ## Complete Installation Guide
 
 ### Step 1: Install Emacs (emacs-plus)
@@ -37,6 +41,8 @@ This configuration assumes the **fish shell**. Most commands below are written f
 brew tap d12frosted/emacs-plus
 brew install emacs-plus@31 --with-compress-install --with-dbus --with-debug --with-mailutils --with-xwidgets
 ```
+
+(The dotfiles Brewfile carries exactly this line, plus `~/.config/emacs-plus/build.yml`, which the formula reads at build time for the app icon. The formula leaves `Emacs.app` in `/opt/homebrew/opt/emacs-plus@31/`; copy it to `/Applications` yourself if you want it in the Dock — the dotfiles README has the command.)
 
 Verify the installation:
 
@@ -91,9 +97,9 @@ brew install ripgrep fd git libgccjit imagemagick coreutils direnv enchant pkgco
 
 What these are for, in plain words: `ripgrep` and `fd` power fast project search, `libgccjit` lets Emacs compile packages to native code (speed), `coreutils` provides `gls` for nicer file listings, `enchant` + `pkgconf` power the spell checker (jinx compiles a small native module against them on first launch), and `direnv` loads each project's own environment variables (see [Per-Project Secrets](#per-project-secrets-envrc) below — this is also how the AI agent gets the _right_ credentials per client).
 
-Hook direnv into fish (one time):
+direnv also has to be hooked into your shell. With the dotfiles' fish configuration this is already done: `conf.d/direnv_hook.fish` is a committed snapshot of `direnv hook fish` (faster than re-running it on every shell start), and `maintain` keeps it current. On a standalone fish install, hook it the plain way instead:
 
-```bash
+```fish
 echo 'direnv hook fish | source' >> ~/.config/fish/config.fish
 ```
 
@@ -106,10 +112,12 @@ Install tools only for the languages you'll use. The configuration automatically
 #### Python
 
 ```bash
-# Install pyenv
+# Install pyenv (in the dotfiles Brewfile)
 brew install pyenv
 
-# Add pyenv to fish shell
+# Add pyenv to fish shell. The dotfiles fish config already does this:
+# config.fish exports PYENV_ROOT and conf.d/pyenv_init.fish is a snapshot of
+# `pyenv init - fish`. On a standalone fish install, hook it by hand instead:
 set -Ux PYENV_ROOT $HOME/.pyenv
 echo 'pyenv init - fish | source' >> ~/.config/fish/config.fish
 source ~/.config/fish/config.fish
@@ -140,34 +148,41 @@ poetry config virtualenvs.in-project true
 
 _(This also covers automatic Prettier formatting for HTML, CSS, JSON, YAML, and Markdown)_
 
-```bash
+Node comes from `nvm.fish` only (never from Homebrew), and the global packages are listed in the dotfiles' `~/.npm-globals` manifest, so with the dotfiles this whole block is `nvm install lts; and set -U nvm_default_version (node --version); and npm-globals install`. By hand:
+
+```fish
 # Install Node.js and npm via Fisher (if using Fish)
 fisher install jorgebucaran/nvm.fish
 nvm install lts
 
-# Install JavaScript/TypeScript tools
+# Install JavaScript/TypeScript tools (all in ~/.npm-globals)
 npm install -g typescript                    # TypeScript compiler
 npm install -g typescript-language-server    # Language server
 npm install -g prettier                      # Universal Code formatter
 npm install -g eslint                        # Linter
-npm install -g vscode-langservers-extracted  # ESLint Language server
+npm install -g vscode-langservers-extracted  # ESLint, HTML, CSS and JSON language servers
 npm install -g @tailwindcss/language-server  # Tailwind CSS support
+npm install -g svelte-language-server prettier-plugin-svelte @vue/language-server  # Svelte and Vue
 ```
+
+Remember that nvm installs globals **per Node version**: after `nvm install <version>`, run `npm-globals install` again for that version.
 
 ---
 
 #### Go
 
-```bash
+```fish
 # Install Go
 brew install go
 
-# Install Go development tools
+# Install Go development tools. The dotfiles Brewfile installs these (plus
+# dlv for debugging and sqls) as `go "..."` entries, into ~/go/bin.
 go install golang.org/x/tools/gopls@latest                             # Language server
 go install golang.org/x/tools/cmd/goimports@latest                     # Formatter
 go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest  # Linter
+go install github.com/go-delve/delve/cmd/dlv@latest                    # Debugger (dape)
 
-# Add GOPATH to PATH
+# Add GOPATH to PATH (the dotfiles config.fish already adds ~/go/bin)
 fish_add_path (go env GOPATH)/bin
 ```
 
@@ -199,7 +214,7 @@ rustup component add clippy         # Linter
 brew install php composer
 
 # Install PHP development tools
-npm install -g intelephense                            # Language server
+npm install -g intelephense                            # Language server (in ~/.npm-globals)
 composer global require squizlabs/php_codesniffer      # Code style checker (phpcbf)
 composer global require "dealerdirect/phpcodesniffer-composer-installer"
 phpcs --config-set --default_standard PSR12
@@ -229,7 +244,7 @@ brew install openjdk google-java-format
 #### Shell Scripting (Bash / Zsh / Fish)
 
 ```bash
-# Install Shell development tools
+# Install Shell development tools (Brewfile and ~/.npm-globals respectively)
 brew install shellcheck shfmt        # Linter and Formatter
 npm install -g bash-language-server  # Language server
 ```
@@ -247,7 +262,7 @@ brew install swiftlint      # Linter
 brew install swift-format   # Formatter
 ```
 
-_(Note: For the Swift LSP server to work, you need the full Xcode app installed from the Mac App Store)_.
+_(Note: For the Swift LSP server to work, you need the full Xcode app installed from the Mac App Store. `swiftlint` and `swift-format` are not in the dotfiles Brewfile — install them by hand if you write Swift.)_
 
 ---
 
@@ -271,11 +286,14 @@ cs install metals scalafmt
 
 #### Databases (SQL, MongoDB, Redis)
 
-```bash
-# Install SQL formatter, linter, and language server
-npm install -g sqlint sql-language-server sql-formatter
+The SQL setup uses `sql-language-server` for completion (registered in `lang-server.el`), `sqlint` as a Flycheck checker, and `sql-formatter` through Apheleia. None of the three is in the dotfiles manifests, and `sqlint` is a Ruby gem, not an npm package (`languages.el` adds the user gem bin directory to `exec-path` for it). `sqls`, the Go language server the Brewfile installs, is the alternative server dev.el's comments refer to.
 
-# Install MongoDB shell and Redis CLI
+```bash
+# SQL language server and formatter (npm), linter (Ruby gem)
+npm install -g sql-language-server sql-formatter
+gem install sqlint
+
+# MongoDB shell and Redis CLI (not in the Brewfile; install if you use them)
 brew install mongosh redis
 ```
 
@@ -302,7 +320,8 @@ brew install hadolint hashicorp/tap/terraform
 # Install Pandoc (for Markdown live-preview rendering)
 brew install pandoc
 
-# Install libxml2 (provides xmllint for XML formatting)
+# xmllint (XML formatting) ships with macOS in /usr/bin; libxml2 from Homebrew
+# is only needed if that copy is ever missing
 brew install libxml2
 
 # Install taplo (TOML formatter — auto-format on save for .toml files)
@@ -316,11 +335,11 @@ brew install taplo
 This configuration integrates [Claude Code](https://docs.claude.com/en/docs/claude-code/overview), Anthropic's coding agent, directly into Emacs.
 
 ```bash
-brew install --cask claude-code   # Homebrew only -- never via npm (see ~/dotfiles/npm/.npm-globals)
+brew install --cask claude-code@latest   # Homebrew only -- never via npm; this is the cask in the dotfiles Brewfile
 claude   # run once in a terminal to log in
 ```
 
-For **Gemini models**, install Google's agent CLI as well — Emacs drives it through the vendor-neutral agent-shell package (`C-c g`):
+For **Gemini models**, install Google's agent CLI as well — Emacs drives it through the vendor-neutral agent-shell package (`C-c g`). It is in the `~/.npm-globals` manifest; by hand:
 
 ```bash
 npm install -g @google/gemini-cli
@@ -385,6 +404,8 @@ Emacs uses special notation for keyboard shortcuts:
 - `M-x` = Hold Option/Alt (⌥) and press x
 - `C-c t` = Hold Control and press c, then release and press t
 - `s-j` = Hold Command (⌘) and press j
+
+With the Karabiner-Elements remap from the prerequisites, **Control is Caps Lock** when held (and Escape when tapped), so `C-x C-f` is Caps Lock + x, Caps Lock + f. Option is Meta in the GUI and, because Ghostty is configured with `macos-option-as-alt`, in terminal Emacs (`emacsclient -t`) too.
 
 **Tip:** whenever you press a prefix (like `C-c` or `s-p`) and pause, a small panel pops up showing every key you can press next. You never need to memorize full tables — just start typing and read.
 
