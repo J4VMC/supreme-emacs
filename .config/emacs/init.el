@@ -50,12 +50,12 @@
 ;; STARTUP HOOKS
 ;; =============================================================================
 
-(defun jmc/report-startup-time ()
+(defun jmc-report-startup-time ()
   "Report the total startup time to the echo area."
   (message "Startup took %.2f seconds"
            (float-time (time-subtract after-init-time before-init-time))))
 
-(add-hook 'emacs-startup-hook #'jmc/report-startup-time)
+(add-hook 'emacs-startup-hook #'jmc-report-startup-time)
 
 ;; =============================================================================
 ;; HOMEBREW PATH BOOTSTRAP (macOS)
@@ -74,6 +74,14 @@
 ;; We detect which one exists and prepend its bin/ directory immediately, so
 ;; load-time lookups work. The idle-timer import later fills in everything
 ;; else (nvm-managed node, composer, go, etc.).
+
+(defun jmc-nvm-dir-version (bin-dir)
+  "Return the \"X.Y.Z\" of an nvm BIN-DIR such as ~/.local/share/nvm/vX.Y.Z/bin.
+The wildcard that produces BIN-DIR guarantees the leading \"v\", which
+`version<' does not accept, so it is dropped."
+  (substring (file-name-nondirectory
+              (directory-file-name (file-name-directory (directory-file-name bin-dir))))
+             1))
 
 (when (eq system-type 'darwin)
   (let* ((brew-prefix (if (file-directory-p "/opt/homebrew")
@@ -95,9 +103,14 @@
   ;; install vscode-json-languageserver".
   (dolist (dir (append
                 ;; nvm: pick the NEWEST installed version if several
-                ;; exist. exec-path-from-shell later replaces this with
-                ;; the fish-configured default anyway.
-                (last (sort (file-expand-wildcards "~/.local/share/nvm/v*/bin") #'string<))
+                ;; exist — compared as versions (`version<'), since a
+                ;; plain string sort would rank v9 above v22.
+                ;; exec-path-from-shell later replaces this with the
+                ;; fish-configured default anyway.
+                (last (sort (file-expand-wildcards "~/.local/share/nvm/v*/bin")
+                            (lambda (a b)
+                              (version< (jmc-nvm-dir-version a)
+                                        (jmc-nvm-dir-version b)))))
                 (list "~/.pyenv/shims" "~/.local/bin")))
     (let ((dir (expand-file-name dir)))
       (when (file-directory-p dir)
@@ -464,7 +477,7 @@ After updating and verifying everything works, run
 (require 'completion)  ; Completion frameworks (Vertico, Corfu)
 
 (require 'explorer)    ; File management tools (Dired tweaks)
-(require 'terminal)    ; Built-in terminals (ghostel)
+(require 'terminal)    ; Terminal emulator (ghostel, a libghostty package)
 (require 'tree)        ; Tree-sitter (advanced syntax highlighting)
 (require 'languages)   ; Language-specific major modes
 (require 'dev)         ; Development tools (Magit, Docker)
@@ -550,8 +563,11 @@ After updating and verifying everything works, run
 ;; -> The old `emacs-startup-hook` that manually reset the threshold to 800KB
 ;;    has been REMOVED: it ran after gcmh started and fought its strategy,
 ;;    forcing GC pauses during activity that gcmh exists to prevent.
+;; -> `elpaca-after-init', not `emacs-startup': see the jinx block in
+;;    editor.el — on a fresh clone the use-package body runs after
+;;    `emacs-startup-hook' already fired, and gcmh never started.
 (use-package gcmh
-  :hook (emacs-startup . gcmh-mode)
+  :hook (elpaca-after-init . gcmh-mode)
   :diminish gcmh-mode
   :config
   ;; Set the "typing" threshold to a high number (e.g., 100MB)
@@ -619,7 +635,7 @@ update succeeded, only that it started. Inspect `elpaca-log' for results."
        (message "Automatic package update failed to start — %s"
                 (error-message-string err))))))
 
-(defun jmc-elpaca-daily-update-h ()
+(defun jmc-elpaca-weekly-update-h ()
   "Run an update when at least `jmc-elpaca-update-interval-days' have passed.
 Does nothing while a lock file is active: pinned refs make automatic
 updates pointless — use `jmc-elpaca-update-unlocked' deliberately."
@@ -639,6 +655,6 @@ updates pointless — use `jmc-elpaca-update-unlocked' deliberately."
 ;; finishes initializing, so it never slows down the initial startup.
 (add-hook 'elpaca-after-init-hook
           (lambda ()
-            (run-with-idle-timer 60 nil #'jmc-elpaca-daily-update-h)))
+            (run-with-idle-timer 60 nil #'jmc-elpaca-weekly-update-h)))
 
 ;;; init.el ends here

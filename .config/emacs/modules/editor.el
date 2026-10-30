@@ -405,11 +405,18 @@ and truename spellings in one anchored alternation."
 ;; stock `isearch-backward' as an escape hatch: occurrence-granular,
 ;; and — unlike minibuffer-based search — usable inside keyboard macros.
 
-;; `evil-nerd-commenter`: Rapid code commenting/uncommenting (e.g., via `M-/`).
+;; `evil-nerd-commenter`: comment/uncomment the line or region with `M-;'.
+;; -> Exactly ONE key, bound explicitly. `evilnc-default-hotkeys' takes
+;;    two flags (NO-EVIL NO-EMACS); with only the first, its Emacs half
+;;    still ran one idle second after startup and `global-set-key'ed
+;;    `M-;', `C-c l', `C-c c' and `C-c p' — wiping the whole Claude Code
+;;    `C-c c' prefix (ai.el) and shadowing `C-c l'/`C-c p' outside LSP and
+;;    perspective buffers. `M-/' stays the stock `dabbrev-expand'.
 (use-package evil-nerd-commenter
   :defer 1
   :config
-  (evilnc-default-hotkeys t))
+  (evilnc-default-hotkeys t t)
+  (global-set-key (kbd "M-;") #'evilnc-comment-or-uncomment-lines))
 
 ;; NOTE: the `compat' library jinx depends on is declared in init.el (and
 ;; waited on), BEFORE any module loads — see the COMPAT section there for
@@ -423,18 +430,25 @@ and truename spellings in one anchored alternation."
 ;; -> SYSTEM DEPENDENCY: the enchant library — `brew install enchant`
 ;;    (tracked in the Brewfile). jinx compiles its native module against it
 ;;    on first load (needs pkgconf, also in the Brewfile).
+;; -> `elpaca-after-init', not `emacs-startup': use-package bodies are
+;;    evaluated when Elpaca finalises its queue. On a normal start that is
+;;    before `emacs-startup-hook' runs, but on a fresh clone (packages
+;;    still building) it is after — and a hook added to a list that has
+;;    already run never fires. Elpaca's own hook runs in both cases.
 (use-package jinx
-  :hook (emacs-startup . global-jinx-mode)
+  :hook (elpaca-after-init . global-jinx-mode)
   :bind (("M-$" . jinx-correct)
          ("C-M-$" . jinx-languages)))
 
 (use-package which-key
   :ensure nil ; Built into Emacs 30+
   :init
-  (which-key-mode)
-  :config
+  ;; Both BEFORE `which-key-mode': the idle timer is created with the
+  ;; delay current at the moment the mode is enabled (the option's own
+  ;; docstring says so), so a `:config' setq came too late to shorten it.
   (setq which-key-idle-delay 0.5)    ; Pop up a bit faster
-  (setq which-key-add-column-padding 1))
+  (setq which-key-add-column-padding 1)
+  (which-key-mode))
 
 ;; Built-in `repeat-mode`: repeat the last command's final key without the
 ;; prefix. After `C-x o` (other-window), just keep tapping `o` to cycle

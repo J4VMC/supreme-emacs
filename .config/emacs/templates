@@ -1,8 +1,9 @@
-;; -*- mode: emacs-lisp -*-
-
 ;; Templates are defined on a per-major-mode basis. The name of a mode
-;; alone on a line starts templates for that major mode. See the
-;; documentation for tempel for more details.
+;; alone on a line starts templates for that major mode (tempel matches
+;; with `derived-mode-p', so a parent mode covers its children: text-mode
+;; covers markdown and commit buffers, web-mode covers svelte/vue/twig
+;; files). Only modes this configuration actually opens files in are
+;; listed — see languages.el. See the documentation for tempel for details.
 ;;
 ;; Template syntax:
 ;;
@@ -25,7 +26,7 @@
 ;; (FORM ...) Other Lisp forms are evaluated. Named fields are lexically bound.
 ;; q Quits the containing template when jumped to.
 
-rust-mode rust-ts-mode rustic-mode php-mode php-ts-mode typescript-mode typescript-ts-mode tsx-ts-mode js-ts-mode js-mode js2-mode mongo-mode go-mode go-ts-mode scala-ts-mode scala-mode swift-mode swift-ts-mode java-mode java-ts-mode
+rustic-mode rust-ts-mode php-ts-mode typescript-ts-mode tsx-ts-mode js-ts-mode js-mode go-ts-mode scala-ts-mode swift-ts-mode java-ts-mode
 
 ;; ============================================
 ;; ANNOTATIONS WITH DOUBLE SLASH
@@ -38,7 +39,7 @@ rust-mode rust-ts-mode rustic-mode php-mode php-ts-mode typescript-mode typescri
 (working "// WORKING HERE: " p)
 
 
-python-mode python-ts-mode redis-mode dockerfile-mode terraform-mode ansible-mode
+python-ts-mode python-mode redis-mode dockerfile-ts-mode terraform-mode yaml-ts-mode toml-ts-mode bash-ts-mode sh-mode fish-mode conf-mode
 
 ;; ============================================
 ;; ANNOTATIONS WITH HASH
@@ -51,7 +52,7 @@ python-mode python-ts-mode redis-mode dockerfile-mode terraform-mode ansible-mod
 (working "# WORKING HERE: " p)
 
 
-sql-mode sql-ts-mode
+sql-mode
 
 ;; ============================================
 ;; ANNOTATIONS WITH DOUBLE DASH
@@ -64,10 +65,10 @@ sql-mode sql-ts-mode
 (working "-- WORKING HERE: " p)
 
 
-html-mode web-mode
+html-mode web-mode nxml-mode
 
 ;; ============================================
-;; ANNOTATIONS FOR HTML
+;; ANNOTATIONS FOR HTML / XML
 ;; ============================================
 
 (fixme "<!-- FIXME: " p " -->")
@@ -90,17 +91,21 @@ css-mode css-ts-mode
 (working "/* WORKING HERE: " p " */")
 
 
-web-mode twig-mode
+emacs-lisp-mode lisp-data-mode
 
 ;; ============================================
-;; ANNOTATIONS FOR TWIG
+;; ANNOTATIONS WITH DOUBLE SEMICOLON
 ;; ============================================
 
-(fixme "{# FIXME: " p " #}")
-(todo "{# TODO: " p " #}")
-(bug "{# BUG: " p " #}")
-(hack "{# HACK: " p " #}")
-(working "{# WORKING HERE: " p " #}")
+(fixme ";; FIXME: " p)
+(todo ";; TODO: " p)
+(bug ";; BUG: " p)
+(hack ";; HACK: " p)
+(working ";; WORKING HERE: " p)
+
+;; (The former Twig section is gone: there is no twig-mode here — .twig
+;;  files open in web-mode — and a second set of templates with the same
+;;  names for web-mode was unreachable behind the HTML ones above.)
 
 text-mode git-commit-mode
 

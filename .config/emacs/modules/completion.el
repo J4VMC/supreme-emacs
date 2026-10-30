@@ -141,7 +141,6 @@
 ;; Consult: Provides supercharged versions of built-in Emacs search commands.
 ;; -> All of these seamlessly use the Vertico/Orderless UI setup above.
 (use-package consult
-  :after vertico
   :bind (;; `C-x b`: A vastly improved buffer switcher with previews.
          ("C-x b" . consult-buffer)
          ;; `M-y`: A fuzzy-searchable clipboard history (yank-pop).
@@ -163,6 +162,10 @@
   ;; Arguments passed to `ripgrep` under the hood.
   ;; -> Consult's default flags, plus: hidden files, ignore `.git/`, and
   ;;    size/column limits so giant vendored files can't wedge the search.
+  ;; -> `--path-separator /' must be exactly ONE byte: an earlier copy of
+  ;;    this string, taken from consult's SOURCE, kept the `/\' that is a
+  ;;    string line-continuation there, which handed rg a two-byte
+  ;;    separator and made every ripgrep search fail to start.
   ;; -> Three past mistakes, kept out on purpose:
   ;;    * NO trailing "." — consult appends its own search paths after the
   ;;      pattern; a literal "." in the args made rg ALSO search the current
@@ -174,7 +177,7 @@
   ;;      filenames when handed a single file, which broke consult's
   ;;      output parsing.
   (setq consult-ripgrep-args
-        "rg --null --line-buffered --color=never --max-columns=150 --max-columns-preview --max-filesize 1M --path-separator /\\ --smart-case --no-heading --with-filename --line-number --search-zip --hidden --glob !.git/")
+        "rg --null --line-buffered --color=never --max-columns=150 --max-columns-preview --max-filesize 1M --path-separator / --smart-case --no-heading --with-filename --line-number --search-zip --hidden --glob !.git/")
   ;; Press `/` during a Consult search to narrow results by category.
   (setq consult-narrow-key "/")
   ;; In a narrowed buffer, show line numbers relative to the WHOLE file,
@@ -358,8 +361,11 @@
   ;; `jmc-tempel-setup-capf-h' itself, so it is NOT added separately here
   ;; (it used to be, giving the capf two entries in every commit buffer).
   (add-hook 'git-commit-setup-hook #'jmc-magit-commit-conventional-h)
-  :config
-  ;; Automatically expand a snippet if you type its trigger word followed by SPACE.
+
+  ;; Automatically expand a snippet if you type its trigger word followed
+  ;; by SPACE. In `:init' (the mode is autoloaded), not `:config': tempel
+  ;; is deferred by `:bind', so a `:config' placement only switched this on
+  ;; after the first `M-*'/`M-+' or completion — never from the start.
   (global-tempel-abbrev-mode 1))
 
 ;; LSP Snippet Tempel: Bridges LSP server snippets and Tempel.

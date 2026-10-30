@@ -359,7 +359,7 @@ emacs
 
 1. Emacs will automatically download and install packages (takes 2-5 minutes).
 2. You'll land on a welcome screen listing your recent files and projects. Everything on it is keyboard-driven: move between items with `TAB` / `S-TAB` or the arrow keys and press `RET` to open (the mouse works too), or use the action keys — `f` find a file, `r` search all recent files, `p` open any project, `e` open this configuration as a project. `d` forgets the item under point (removes it from the list — nothing on disk; forgotten projects also stay out of auto-discovery). Wherever you are, `s-p h` brings the screen back.
-3. Emacs may ask to update packages (answer `y` or `n`).
+3. Packages update themselves in the background, at most once a week, starting a minute after an idle Emacs; a message in the echo area says when a run starts (`M-x elpaca-log` shows the result). Nothing to answer.
 4. When you open a code file for a language whose syntax grammar isn't installed yet, Emacs **asks permission** to install it. Answer `y` — it takes a few seconds, once per language.
     - Prefer to get it all over with at once? Run `M-x jmc-treesit-install-all-grammars` and grab a coffee.
 
@@ -422,6 +422,7 @@ Our keybindings act as a hybrid between classic Emacs bindings and modern IDE co
 | `C-x k`   | Close current file        |
 | `C-x b`   | Switch between open files (current workspace only) |
 | `C-x C-c` | Quit Emacs                |
+| `C-c O`   | Edit the current folder as text (oil): type file names, `C-c C-c` creates them |
 
 Quitting asks its questions ("save this file?") in the small area at the very bottom of the frame — answer with `y` or `n` there.
 
@@ -453,14 +454,17 @@ The isolation runs through the whole config: `C-x b` lists only the current work
 | --------- | ------------------------------------------- |
 | `s-p p`   | Open / switch project (own workspace, tree + folder view) |
 | `s-p f`   | Find file in current project (Fuzzy)        |
+| `s-p b`   | Switch to an open buffer of this project    |
 | `s-p g`   | Search text across project (live results)   |
 | `s-p t`   | Toggle file tree sidebar                    |
 | `s-p d`   | Open the project root in the file manager   |
 | `s-p r`   | Toggle the project terminal                 |
 | `s-p c`   | Compile / Build project                     |
 | `s-p A`   | Launch the AI agent for the current project |
+| `s-p a`   | Open a plain Claude Code terminal at the project root |
 | `s-p h`   | Back to the welcome screen                  |
 | `s-0`     | Move cursor focus to the file tree          |
+| `s-p 0`   | Same, from the project menu                 |
 | `C-c t d` | Manually add a folder to the sidebar        |
 
 **Workspace management** lives on the `C-c p` prefix (press it and pause to see every option):
@@ -482,11 +486,15 @@ The isolation runs through the whole config: `C-x b` lists only the current work
 | Shortcut | Action                                          |
 | -------- | ----------------------------------------------- |
 | `C-s`    | Search in the current file (live, fuzzy)        |
+| `M-s l`  | Same as `C-s` (the `M-s` search-menu spelling)  |
 | `M-s L`  | Search for a line across all open files         |
 | `M-s o`  | Jump to a heading/function in the current file  |
 | `M-s r`  | Project-wide text search (Ripgrep)              |
 | `M-s e`  | Searchable list of the current buffer's errors  |
 | `M-s d`  | Search offline Dash docs (word at cursor)       |
+| `M-y`    | Paste from a searchable clipboard history       |
+| `C-.`    | Actions menu for the item at cursor / in the minibuffer (Embark) |
+| `C-;`    | Run the default action on that item right away  |
 | `C-c j`  | Jump instantly to any visible line              |
 | `s-j`    | Jump instantly to any visible character         |
 
@@ -530,6 +538,7 @@ Three integrations are included: a quick Claude command interface (`C-c c`), a f
 | Shortcut  | Action                                          |
 | --------- | ----------------------------------------------- |
 | `s-p A`   | Launch the agent for the current project        |
+| `s-p a`   | Open a plain Claude Code terminal at the project root |
 | `C-c c`   | Claude Code command menu (pause to see options) |
 | `C-c i i` | Start an IDE-integrated agent session           |
 | `C-c i m` | Open the agent menu                             |
@@ -578,6 +587,9 @@ To keep the AI agent from _reading_ your secret files, add this to `~/.claude/se
 | `M-p`       | Jump to previous code error              |
 | `C-c l`     | All LSP commands (pause to see the menu) |
 | `C-c l r r` | Rename symbol across project             |
+| `C-c l d`   | Search the offline docs for the symbol   |
+| `C-c C-d`   | Glance at the documentation (LSP buffers); help for the symbol elsewhere |
+| `C-c o`     | Structural editing menu (Python/JS/TS): move and select by code node |
 
 ### Editing (CUA Mode Enabled)
 
@@ -592,9 +604,14 @@ This configuration enables `cua-mode`, meaning standard OS copy/paste shortcuts 
 | `C-z`           | Undo                                                   |
 | `C-S-z`         | Redo                                                   |
 | `M-J`           | Expand selection semantically (word -> string -> func) |
-| `M-/`           | Comment / Uncomment line or block                      |
+| `M-;`           | Comment / Uncomment line or block                      |
 | `M-$`           | Correct the misspelled word at cursor                  |
+| `C-M-$`         | Choose the spell-check languages                       |
 | `s-<backspace>` | Fold / unfold the code block at cursor                 |
+| `M-<up>` / `M-<down>` | Move the current line or selection up / down     |
+| `s-(` `s-[` `s-{` | Wrap the selection (or insert a pair) of that kind   |
+| `s-i`           | Insert menu: wrap in `'` `"` `` ` `` `<` quotes, `e` Emacs quotes, `m` Markdown code block, `3` Python docstring, `$` PHP variable |
+| `s-b`           | Bracket menu: `m` jump to the matching bracket, `s` select inside, `l`/`r` previous/next bracket, `c` change the pair, `d`/`k` delete |
 
 Your undo history is **saved to disk**: even after restarting Emacs, you can keep undoing yesterday's edits. Run `M-x vundo` to browse the whole undo history as a visual tree.
 
@@ -607,8 +624,43 @@ Your undo history is **saved to disk**: even after restarting Emacs, you can kee
 | `C-<`     | Add a cursor at the previous matching word              |
 | `C-c C-<` | Add cursors at ALL matching words                       |
 | `C-M-j`   | Add a cursor to each selected line                      |
+| `C-M-=`   | Add cursors at ALL occurrences of the symbol at cursor  |
 
 `C-c m` is the comfortable way in: a pop-up menu where `n`/`p` mark the next/previous match, `N`/`P` skip one, `u`/`U` unmark — then just start typing to edit with all cursors (`C-g` collapses back to one).
+
+**Snippets** (tempel; the templates live in the `templates` file):
+
+| Shortcut                  | Action                                              |
+| ------------------------- | --------------------------------------------------- |
+| `M-*`                     | Insert a snippet by name                            |
+| `M-+`                     | Expand the snippet trigger before the cursor        |
+| `C-<down>` / `C-<up>`     | Next / previous field inside a snippet              |
+| `M-<down>` / `M-<up>`     | Same (these win over line-moving while a snippet is active) |
+| `C-c RET`                 | Finish the snippet                                  |
+
+Typing a trigger word (`todo`, `fixme`, `feat`, ...) followed by `SPACE` expands it too.
+
+**Language-specific keys** (only in buffers of that language):
+
+| Language | Shortcut        | Action                                            |
+| -------- | --------------- | ------------------------------------------------- |
+| Python   | `C-c ! f`       | Run the Flask development server                  |
+| Python   | `C-c b` / `C-c B` | Insert a `breakpoint()` below / remove them all |
+| Rust     | `C-c C-c l`     | List errors                                       |
+| Rust     | `C-c C-c a`     | Code action at cursor                             |
+| Rust     | `C-c C-c r`     | Rename symbol                                     |
+| Rust     | `C-c C-c h`     | Show documentation                                |
+| Rust     | `C-c C-c d`     | Start the debugger                                |
+| Rust     | `C-c C-c s`     | rust-analyzer status                              |
+| Rust     | `C-c C-c e`     | Expand the macro at cursor                        |
+| Rust     | `C-c C-c j`     | Join lines                                        |
+| Rust     | `C-c C-c q` / `Q` | Restart / shut down the language server         |
+| Rust     | `M-j`           | Symbol outline of the file                        |
+| Markdown | `C-c v` / `C-c V` | Open / close the live preview                   |
+| CSV      | `TAB` / `S-TAB` | Next / previous field                             |
+| Org      | `C-c C-r`       | HTTP requests (verb): `C-c C-r C-r` sends the one at cursor |
+| Any      | `s-r`           | Run the current file (quickrun)                   |
+| Any      | `C-c D`         | Docker containers and images                      |
 
 ### Debugging (Dape)
 
@@ -638,5 +690,9 @@ _(In Rust files, `C-c C-c d` starts the debugger with Rust-specific setup.)_
 | `C-h k`  | Describe key (press this, then press another key) |
 | `C-h f`  | Describe function                                 |
 | `C-h v`  | Describe variable                                 |
+| `C-h F`  | Describe function (only functions, not macros)    |
+| `C-h x`  | Describe command                                  |
+| `C-c C-d` | Help for the symbol at cursor (outside LSP buffers) |
+| `C-h B`  | List every Embark action / binding available here |
 
 The help pages in this config are upgraded (helpful.el): they show the documentation, the source code, and usage examples in one place.

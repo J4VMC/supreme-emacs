@@ -45,7 +45,6 @@
 (defvar lsp-metals-show-implicit-arguments)
 (defvar lsp-metals-show-implicit-conversions-and-classes)
 (defvar lsp-metals-show-inferred-type)
-(defvar lsp-pyright-workspace-config)
 (defvar lsp-pyright-multi-root)
 (defvar lsp-rust-analyzer-cargo-watch-command)
 (defvar lsp-rust-analyzer-server-display-inlay-hints)
@@ -68,9 +67,10 @@
 (use-package lsp-mode
   :diminish "LSP"
   :defer t
-  :hook (;; Enable visual error underlining (diagnostics) immediately.
-         (lsp-mode . lsp-diagnostics-mode)
-         ;; Show keybinding hints for LSP commands via `which-key`.
+  ;; (No `lsp-diagnostics-mode' / `lsp-completion-mode' hooks: lsp-mode's
+  ;;  own `lsp--auto-configure' enables both — and `lsp-ui-mode' — in every
+  ;;  LSP buffer; the hooks this file used to add ran them a second time.)
+  :hook (;; Show keybinding hints for LSP commands via `which-key`.
          (lsp-mode . lsp-enable-which-key-integration))
   :custom
   ;; --- Basic Navigation ---
@@ -190,15 +190,9 @@
 ;; COMPLETION & UI INTEGRATION
 ;; =============================================================================
 
-;; Completion "Glue": Connects LSP data to the `corfu` autocomplete UI.
-;; -> `:ensure nil` is REQUIRED: `lsp-completion` is a library INSIDE the
-;;    lsp-mode package, not a package of its own. With
-;;    `use-package-always-ensure` (init.el), omitting it makes Elpaca try to
-;;    install a nonexistent "lsp-completion" package on every startup.
-(use-package lsp-completion
-  :ensure nil
-  :no-require
-  :hook ((lsp-mode . lsp-completion-mode)))
+;; Completion glue (LSP data -> the corfu UI) needs no block of its own:
+;; `lsp-completion-mode' is switched on by lsp-mode itself (see the note on
+;; the lsp-mode block above). corfu reads the resulting capf.
 
 ;; LSP UI: Manages the "pretty" visual elements.
 (use-package lsp-ui
@@ -230,12 +224,14 @@
 ;; =============================================================================
 
 ;; --- Java (Eclipse JDTLS) ---
+;; Declared so Elpaca installs it; nothing else is needed here. lsp-java is
+;; in `lsp-client-packages', so lsp-mode requires it itself when the first
+;; Java buffer starts LSP, and that start is the `lsp-deferred' hook in
+;; languages.el. (The old `:after lsp-mode' + hook here started LSP a
+;; second time per buffer, and the `:after' delayed installing that hook
+;; until lsp-mode had loaded once.)
 (use-package lsp-java
-  :defer t
-  :after lsp-mode
-  :hook (java-ts-mode . (lambda ()
-                          (require 'lsp-java)
-                          (lsp-deferred))))
+  :defer t)
 
 ;; --- ESLint (JS/TS) ---
 ;; -> `:ensure nil`: `lsp-eslint` ships inside lsp-mode (clients/lsp-eslint.el);
@@ -267,12 +263,11 @@
     (add-to-list 'lsp-tailwindcss-major-modes tw-major-mode)))
 
 ;; --- Scala (Metals) ---
+;; Same as lsp-java: in `lsp-client-packages', required by lsp-mode itself;
+;; the single `lsp-deferred' hook is in languages.el. `:config' runs when
+;; lsp-mode loads it.
 (use-package lsp-metals
   :defer t
-  :hook (scala-ts-mode . (lambda ()
-                           (require 'lsp-metals)
-                           ;; `lsp-deferred` ensures the server only starts when needed.
-                           (lsp-deferred)))
   :config
   (setq lsp-metals-server-args '("-J-Dmetals.allow-multiline-string-formatting=off")
         lsp-metals-show-implicit-arguments t
@@ -286,16 +281,11 @@
   :custom
   (lsp-pyright-langserver-command "basedpyright")
   (lsp-pyright-python-executable-cmd "python3")
-  :hook (python-ts-mode . (lambda ()
-                            (require 'lsp-pyright)
-                            (lsp-deferred)))
-  :preface
-  (defun jmc-set-pyright-paths ()
-    "Dynamically detect project root to calibrate Pyright."
-    (let ((project-root (projectile-project-root)))
-      (when project-root
-        (setq lsp-pyright-workspace-config
-              `(:python.analysis.extraPaths [,project-root])))))
+  ;; Unlike lsp-java/lsp-metals, lsp-pyright is NOT in `lsp-client-packages',
+  ;; so it must be required by hand before LSP starts in a Python buffer.
+  ;; Only the `require' lives here; the one `lsp-deferred' for Python is in
+  ;; languages.el (this hook is added later, so it runs first).
+  :hook (python-ts-mode . (lambda () (require 'lsp-pyright)))
   :init
   ;; ONE pyright per project, not one shared multi-root server.
   ;; -> lsp-pyright registers its client as multi-root by default: every
@@ -311,13 +301,11 @@
   ;;    client registration, so flipping it later has no effect. After
   ;;    changing this, stale sessions need `M-x lsp-workspace-remove-all-folders'
   ;;    (or delete .lsp-session) once.
-  (setq lsp-pyright-multi-root nil)
-
-  ;; Hook on `python-base-mode-hook`, which BOTH python-mode and
-  ;; python-ts-mode run. The old hook was on `python-mode-hook`, which
-  ;; python-ts-mode does NOT run — so the workspace paths were never set
-  ;; for the ts buffers our files actually open in.
-  (add-hook 'python-base-mode-hook #'jmc-set-pyright-paths))
+  (setq lsp-pyright-multi-root nil))
+;; (A hook that pushed the project root into pyright's `extraPaths' was
+;;  removed: it set a variable lsp-pyright never had, and the workspace
+;;  root is already pyright's import root, so even the working version —
+;;  `lsp-pyright-extra-paths' — would have added nothing.)
 
 
 ;; --- Rust (rust-analyzer) ---

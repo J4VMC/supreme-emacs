@@ -854,9 +854,13 @@ already-visible screen has just become stale."
     (jmc-welcome--render window)))
 
 ;; Make the welcome screen the initial buffer — unless Emacs was started
-;; with a file argument (e.g. `emacs file.txt'). Same guard the dashboard
-;; used. emacsclient frames without a file honor this too.
-(unless (> (length command-line-args) 1)
+;; with a file argument (e.g. `emacs file.txt'). Same idea as the guard the
+;; dashboard used, but keyed on a NON-OPTION argument: `emacs --debug-init'
+;; or `emacs -nw' should still land on the welcome screen. (An option's
+;; value, as in `-l file', counts as a file argument too; acceptable.)
+;; emacsclient frames without a file honor this too.
+(unless (seq-some (lambda (arg) (not (string-prefix-p "-" arg)))
+                  (cdr command-line-args))
   (setq initial-buffer-choice #'jmc-welcome-buffer))
 
 ;; The *scratch* buffer is dead weight once a startup screen exists

@@ -37,9 +37,8 @@
   ;; --- Visual Rendering (SHR) ---
   ;; SHR is the library EWW uses to "render" HTML into text.
 
-  ;; Use variable-width (proportional) fonts for web content.
-  ;; -> Makes articles feel like a "Reader Mode" document rather than code.
-  (setq shr-use-fonts t)
+  ;; (Proportional fonts for web content — the "Reader Mode" feel — are
+  ;;  shr's default, `shr-use-fonts' t, so nothing is set for it here.)
 
   ;; Limit the text width to 80 characters.
   ;; -> Prevents lines from stretching across the entire screen on wide monitors,
@@ -49,14 +48,10 @@
   ;; Disable website-defined colors.
   ;; -> Many websites use colors that clash with your Emacs theme.
   ;; -> Disabling this ensures a consistent, accessible look across all pages.
-  (setq shr-use-colors nil)
-
-  ;; --- Navigation Tweaks ---
-
-  ;; Map the 'q' key to kill the buffer and close the window immediately.
-  ;; -> The default behavior is to "bury" the buffer (hide it), which can
-  ;;    lead to many unused buffers cluttering your session.
-  (define-key eww-mode-map (kbd "q") 'quit-window))
+  (setq shr-use-colors nil))
+;; (`q' is left alone: eww-mode derives from special-mode, whose `q' is
+;;  already `quit-window' — it buries the buffer, which is what the
+;;  buffer renaming above is for.)
 
 ;; =============================================================================
 ;; FINALIZE

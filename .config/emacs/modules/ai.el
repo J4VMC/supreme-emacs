@@ -87,17 +87,19 @@
 	 ("C-c i !" . jmc-claude-code-ide-toggle-skip-permissions))
   :custom
   ;; Reuse the libghostty terminal you already run for claude-code.el.
-  ;; -> If your checkout predates ghostel support and this symbol is
-  ;;    rejected, fall back to 'vterm or 'eat and update the repo.
   (claude-code-ide-terminal-backend 'ghostel)
 
   ;; The Cursor-like part: show Claude's edits in an ediff session so you
   ;; review and accept/reject hunks instead of watching a TUI stream.
   (claude-code-ide-use-ide-diff t)
 
-  ;; Match the ghostel drawer geometry from terminal.el (right side, half).
+  ;; Same side as the ghostel drawer (terminal.el). The width is a COLUMN
+  ;; count, not a fraction: the package resizes the side window by
+  ;; (- claude-code-ide-window-width (window-body-width)), so a value
+  ;; like 0.5 squeezed it to the minimum width instead of "half". 100 is
+  ;; the package default and about half of a full-screen frame.
   (claude-code-ide-window-side 'right)
-  (claude-code-ide-window-width 0.5)
+  (claude-code-ide-window-width 100)
 
   :init
   ;; DANGER, off by default: `--dangerously-skip-permissions' bypasses

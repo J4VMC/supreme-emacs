@@ -29,11 +29,9 @@
 ;; COMPILER DECLARATIONS (SILENCE WARNINGS)
 ;; =============================================================================
 
-(defvar projectile-enable-keymap)
 (defvar projectile-switch-project-action)
 (defvar projectile-project-search-path)
 (defvar projectile-generic-command)
-(defvar projectile-grep-command)
 (defvar projectile-enable-caching)
 (defvar treemacs-mode-map)
 (defvar treemacs-python-executable)
@@ -83,8 +81,10 @@
 
 (use-package projectile
   :init
-  ;; Disable Projectile's default "C-c p" keymap so we can use our custom setup.
-  (setq projectile-enable-keymap nil)
+  ;; Projectile binds NO prefix key by default (you opt in by putting
+  ;; `projectile-command-map' somewhere yourself); every project action
+  ;; lives on the `s-p' jump map below instead, which leaves `C-c p' free
+  ;; for Perspective.
 
   ;; Define the root directories where your code projects live.
   ;; -> Projects are nested a few levels deep (e.g.
@@ -97,9 +97,9 @@
         ;; PERFORMANCE: Use `rg` (ripgrep) for file indexing.
         ;; -> Significantly faster than the built-in Emacs `find` command.
         projectile-generic-command "rg -0 --files --color=never --hidden --glob !.git/ --max-filesize 1M"
-
-        ;; PERFORMANCE: Use `rg` for project-wide searching (grep).
-        projectile-grep-command "rg -n --with-filename --no-heading --max-columns=150 --ignore-case --max-filesize 1M --glob !.git/"
+        ;; (No `projectile-grep-command': nothing calls `projectile-grep';
+        ;;  project-wide search is `consult-ripgrep' on `s-p g', whose rg
+        ;;  arguments live in completion.el.)
 
         ;; Enable caching for even faster subsequent file lookups.
         projectile-enable-caching t
@@ -107,7 +107,7 @@
         ;; Automatically pick up new project directories under
         ;; `projectile-project-search-path' instead of only remembering
         ;; projects that have already been visited once.
-        projectile-auto-discover t
+        projectile-auto-discover-projects t
 
         ;; Honor projects forgotten on the welcome screen (`d'). This
         ;; predicate — NOT the builtin `projectile-ignored-projects'
@@ -164,11 +164,10 @@
 (use-package perspective
   :init
   ;; Perspective refuses to enable unless a prefix key is set (or the
-  ;; warning is explicitly suppressed). "C-c p" is free here — Projectile's
-  ;; default map on that key was disabled above (`projectile-enable-keymap'
-  ;; nil), and all project actions live on `s-p' instead. This prefix gives
-  ;; access to the full perspective command set (s: switch, r: rename,
-  ;; c: kill, b: switch buffer in persp, ...).
+  ;; warning is explicitly suppressed). "C-c p" is free here: projectile
+  ;; binds no prefix by default, and all project actions live on `s-p'
+  ;; instead. This prefix gives access to the full perspective command set
+  ;; (s: switch, r: rename, c: kill, b: switch buffer in persp, ...).
   (setq persp-mode-prefix-key (kbd "C-c p"))
 
   ;; Mode-line: show only the CURRENT perspective's name, not the whole
