@@ -58,7 +58,6 @@
 (defvar consult-buffer-sources)
 (defvar consult--source-buffer)
 
-(declare-function jmc-welcome-refresh-visible "welcome")
 (declare-function jmc-welcome "welcome")
 (declare-function jmc-welcome-project-ignored-p "welcome")
 (declare-function persp-mode "perspective")
@@ -86,7 +85,9 @@
   ;; lives on the `s-p' jump map below instead, which leaves `C-c p' free
   ;; for Perspective.
 
-  ;; Define the root directories where your code projects live.
+  ;; Where an EXPLICIT `M-x projectile-discover-projects-in-search-path'
+  ;; looks for projects. That command is the only thing that walks this
+  ;; path now (see `projectile-auto-discover-projects' below).
   ;; -> Projects are nested a few levels deep (e.g.
   ;;    "~/Projects/Software/SuperSecret/some-project"), so search each path
   ;;    (DIRECTORY . DEPTH) levels down to where they actually live, instead
@@ -104,16 +105,27 @@
         ;; Enable caching for even faster subsequent file lookups.
         projectile-enable-caching t
 
-        ;; Automatically pick up new project directories under
-        ;; `projectile-project-search-path' instead of only remembering
-        ;; projects that have already been visited once.
-        projectile-auto-discover-projects t
+        ;; NO automatic project discovery. A project becomes known the
+        ;; first time a file or folder inside it is visited
+        ;; (`projectile-track-known-projects-find-file-hook', on both
+        ;; `find-file-hook' and `dired-before-readin-hook'), which keeps
+        ;; `projectile-known-projects' a true most-recently-used list.
+        ;; -> This config used to scan `projectile-project-search-path'
+        ;;    on every launch (an idle timer here) AND projectile itself
+        ;;    scanned it again on the first switch command. Anything a
+        ;;    scan finds lands at the FRONT of the known list, ahead of
+        ;;    the projects actually being worked on (a folder with a
+        ;;    `.projectile' marker anywhere else), and the walk was
+        ;;    startup work for a folder that need not even exist on the
+        ;;    machine. Scanning is now manual:
+        ;;    `M-x projectile-discover-projects-in-search-path'.
+        projectile-auto-discover-projects nil
 
         ;; Honor projects forgotten on the welcome screen (`d'). This
         ;; predicate — NOT the builtin `projectile-ignored-projects'
         ;; option, whose path matching is broken for discovery; see
-        ;; welcome.el — keeps blocklisted projects out of auto-discovery
-        ;; and the find-file auto-add.
+        ;; welcome.el — keeps blocklisted projects out of a manual
+        ;; re-scan and of the find-file auto-add.
         projectile-ignored-project-function #'jmc-welcome-project-ignored-p)
   :config
   ;; Recognize bare Go modules (no VCS) as projects too.
@@ -130,26 +142,10 @@
   ;;    `projectile-project-root-files-bottom-up' instead.
   (add-to-list 'projectile-project-root-files ".envrc")
 
-  ;; Activate Projectile globally.
-  (projectile-mode 1)
-
-  ;; Re-scan the search path so newly created project directories are known
-  ;; without having been visited once. `projectile-auto-discover' only
-  ;; triggers discovery from interactive switch commands, so an explicit
-  ;; scan is still needed.
-  ;; -> DEFERRED to idle time: the scan walks ~/Projects three levels deep,
-  ;;    which was pure startup latency when run synchronously here.
-  ;; -> The welcome screen (welcome.el) lists projects from the live
-  ;;    `projectile-known-projects', so re-render it after the scan while
-  ;;    it is on display. Unconditionally: even when the scan found
-  ;;    nothing new, the screen may still be showing the pre-projectile
-  ;;    "still loading" placeholder from early startup.
-  (run-with-idle-timer
-   1 nil
-   (lambda ()
-     (projectile-discover-projects-in-search-path)
-     (when (fboundp 'jmc-welcome-refresh-visible)
-       (jmc-welcome-refresh-visible)))))
+  ;; Activate Projectile globally. The welcome screen hooks
+  ;; `projectile-mode-hook' to swap its "still loading" placeholder for
+  ;; the real project list (welcome.el).
+  (projectile-mode 1))
 
 ;; =============================================================================
 ;; PERSPECTIVE (PER-PROJECT WORKSPACES)

@@ -62,6 +62,7 @@
 (defvar projectile-project-search-path)
 
 (declare-function projectile-project-root "projectile")
+(declare-function projectile-known-projects "projectile")
 (declare-function projectile-remove-known-project "projectile")
 (declare-function projectile-persp-switch-project "persp-projectile")
 (declare-function consult-recent-file "consult")
@@ -221,12 +222,20 @@ enough survivors are found instead of filtering all of `recentf-list'."
 
 (defun jmc-welcome--projects ()
   "Return up to `jmc-welcome-projects-count' known projects, newest first.
-`projectile-known-projects' is already recency-ordered; directories that
-no longer exist are skipped (they stay in projectile's list until its
-own cleanup runs)."
+Projectile's list is already recency-ordered; directories that no
+longer exist are skipped (they stay in projectile's list until its own
+cleanup runs).
+-> Read through the FUNCTION `projectile-known-projects', not the
+   variable: projectile loads the saved list from disk lazily, inside
+   that function, the first time a switch command needs it. Reading the
+   variable here showed an EMPTY projects section on every launch until
+   `s-p p' had been pressed once: the saved projects — the ones with a
+   `.projectile' marker included — simply had not been read yet. (With
+   `projectile-auto-discover-projects' off, projects.el, the function
+   only loads and returns the list.)"
   (let ((projects nil)
-        (tail (and (boundp 'projectile-known-projects)
-                   projectile-known-projects)))
+        (tail (and (fboundp 'projectile-known-projects)
+                   (projectile-known-projects))))
     (while (and tail (< (length projects) jmc-welcome-projects-count))
       (let ((project (pop tail)))
         (when (and (not (file-remote-p project))
@@ -298,11 +307,11 @@ Falls back to plain Dired when persp-projectile isn't loaded yet."
 ;; "Forget" is LIST bookkeeping only — nothing is ever deleted on disk.
 ;; Recent files simply leave `recentf-list'. Projects need more care:
 ;; removing one from `projectile-known-projects' is not enough when it
-;; lives under `projectile-project-search-path', because the automatic
-;; re-scan (projects.el idle timer, and projectile-mode on every launch)
-;; would silently re-discover it. Those projects additionally go onto a
-;; persistent blocklist consulted through
-;; `projectile-ignored-project-function' (wired up in projects.el).
+;; lives under `projectile-project-search-path', because the next manual
+;; `M-x projectile-discover-projects-in-search-path' would silently
+;; re-discover it (nothing scans automatically any more; projects.el).
+;; Those projects additionally go onto a persistent blocklist consulted
+;; through `projectile-ignored-project-function' (wired up in projects.el).
 ;;
 ;; Why not projectile's own `projectile-ignored-projects' option? Its
 ;; matching is broken for exactly this case: discovery offers candidates
@@ -329,8 +338,8 @@ auto-add, so both sides are normalized through `file-truename'."
 
 (defun jmc-welcome--rediscoverable-p (project)
   "Non-nil when PROJECT sits under `projectile-project-search-path'.
-Such projects would be re-added by the next automatic re-scan, so
-forgetting them must also blocklist them. Search-path entries are
+Such projects would be re-added by the next manual search-path scan,
+so forgetting them must also blocklist them. Search-path entries are
 either DIR strings or (DIR . DEPTH) conses."
   (let ((expanded (expand-file-name project)))
     (seq-some (lambda (entry)
@@ -354,8 +363,8 @@ either DIR strings or (DIR . DEPTH) conses."
 
 (defun jmc-welcome--forget-project (project)
   "Remove PROJECT from projectile's known list and re-render.
-When PROJECT would be re-discovered automatically, also blocklist it in
-`jmc-welcome-ignored-projects' (persisted via customize)."
+When PROJECT would come back with a search-path scan, also blocklist it
+in `jmc-welcome-ignored-projects' (persisted via customize)."
   (let ((rediscoverable (jmc-welcome--rediscoverable-p project)))
     (when (y-or-n-p (format "Forget project %s%s? "
                             (file-name-nondirectory
@@ -411,7 +420,7 @@ item. Degrades to nil on terminals without mouse tracking."
 (defun jmc-welcome-forget-item ()
   "Forget the list item on the current line (action key: d).
 Recent files leave recentf; projects leave projectile's known list (and
-its auto-discovery, when applicable). Nothing is deleted on disk."
+its search-path discovery, when applicable). Nothing is deleted on disk."
   (interactive)
   (let* ((button (jmc-welcome--button-here))
          (forget-fn (and button (button-get button 'jmc-welcome-forget-fn))))
@@ -671,7 +680,7 @@ as the buffer IS shown)."
           (if (null projects)
               (jmc-welcome--insert-empty
                pad (if (featurep 'projectile)
-                       "No projects known yet — still scanning ~/Projects"
+                       "No projects known yet — f into a project folder adds it"
                      "Projectile is still loading…"))
             (dolist (project projects)
               (let ((project project))
@@ -699,7 +708,7 @@ as the buffer IS shown)."
         (goto-char (or jmc-welcome--first-item (point-min)))
         ;; Sync WINDOW points too. Re-renders can happen while the
         ;; buffer is displayed in a NON-selected window (the
-        ;; projectile-load refresh, the idle re-scan), and `goto-char'
+        ;; projectile-load refresh, say), and `goto-char'
         ;; moves only the BUFFER point — each window's own point was
         ;; left stranded in the top padding after `erase-buffer', where
         ;; the hidden cursor made the lost focus invisible and d/RET
@@ -846,9 +855,8 @@ This is the `initial-buffer-choice' function; also usable any time."
 
 (defun jmc-welcome-refresh-visible ()
   "Re-render the welcome screen if it is currently displayed somewhere.
-Called by projects.el after its idle project re-scan, and after
-projectile first loads — both moments where the project list on an
-already-visible screen has just become stale."
+Runs from `projectile-mode-hook': the project list on an already-visible
+screen is still the pre-projectile placeholder at that point."
   (when-let* ((buffer (get-buffer "*welcome*"))
               (window (get-buffer-window buffer t)))
     (jmc-welcome--render window)))
@@ -882,8 +890,8 @@ already-visible screen has just become stale."
 ;; Elpaca installs projectile AFTER this module has rendered the initial
 ;; screen, so the Projects section usually starts life as the "still
 ;; loading" placeholder. Re-render the moment projectile-mode activates
-;; (its known-projects list is loaded by then; the hook runs after the
-;; mode body).
+;; (the hook runs after the mode body). The saved project list is NOT
+;; loaded by then — `jmc-welcome--projects' loads it itself, see there.
 (add-hook 'projectile-mode-hook #'jmc-welcome-refresh-visible)
 
 ;; =============================================================================
