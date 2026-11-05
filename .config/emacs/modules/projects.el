@@ -29,11 +29,9 @@
 ;; COMPILER DECLARATIONS (SILENCE WARNINGS)
 ;; =============================================================================
 
-(defvar projectile-enable-keymap)
 (defvar projectile-switch-project-action)
 (defvar projectile-project-search-path)
 (defvar projectile-generic-command)
-(defvar projectile-grep-command)
 (defvar projectile-enable-caching)
 (defvar treemacs-mode-map)
 (defvar treemacs-python-executable)
@@ -60,7 +58,6 @@
 (defvar consult-buffer-sources)
 (defvar consult--source-buffer)
 
-(declare-function jmc-welcome-refresh-visible "welcome")
 (declare-function jmc-welcome "welcome")
 (declare-function jmc-welcome-project-ignored-p "welcome")
 (declare-function persp-mode "perspective")
@@ -83,10 +80,14 @@
 
 (use-package projectile
   :init
-  ;; Disable Projectile's default "C-c p" keymap so we can use our custom setup.
-  (setq projectile-enable-keymap nil)
+  ;; Projectile binds NO prefix key by default (you opt in by putting
+  ;; `projectile-command-map' somewhere yourself); every project action
+  ;; lives on the `s-p' jump map below instead, which leaves `C-c p' free
+  ;; for Perspective.
 
-  ;; Define the root directories where your code projects live.
+  ;; Where an EXPLICIT `M-x projectile-discover-projects-in-search-path'
+  ;; looks for projects. That command is the only thing that walks this
+  ;; path now (see `projectile-auto-discover-projects' below).
   ;; -> Projects are nested a few levels deep (e.g.
   ;;    "~/Projects/Software/SuperSecret/some-project"), so search each path
   ;;    (DIRECTORY . DEPTH) levels down to where they actually live, instead
@@ -97,23 +98,34 @@
         ;; PERFORMANCE: Use `rg` (ripgrep) for file indexing.
         ;; -> Significantly faster than the built-in Emacs `find` command.
         projectile-generic-command "rg -0 --files --color=never --hidden --glob !.git/ --max-filesize 1M"
-
-        ;; PERFORMANCE: Use `rg` for project-wide searching (grep).
-        projectile-grep-command "rg -n --with-filename --no-heading --max-columns=150 --ignore-case --max-filesize 1M --glob !.git/"
+        ;; (No `projectile-grep-command': nothing calls `projectile-grep';
+        ;;  project-wide search is `consult-ripgrep' on `s-p g', whose rg
+        ;;  arguments live in completion.el.)
 
         ;; Enable caching for even faster subsequent file lookups.
         projectile-enable-caching t
 
-        ;; Automatically pick up new project directories under
-        ;; `projectile-project-search-path' instead of only remembering
-        ;; projects that have already been visited once.
-        projectile-auto-discover t
+        ;; NO automatic project discovery. A project becomes known the
+        ;; first time a file or folder inside it is visited
+        ;; (`projectile-track-known-projects-find-file-hook', on both
+        ;; `find-file-hook' and `dired-before-readin-hook'), which keeps
+        ;; `projectile-known-projects' a true most-recently-used list.
+        ;; -> This config used to scan `projectile-project-search-path'
+        ;;    on every launch (an idle timer here) AND projectile itself
+        ;;    scanned it again on the first switch command. Anything a
+        ;;    scan finds lands at the FRONT of the known list, ahead of
+        ;;    the projects actually being worked on (a folder with a
+        ;;    `.projectile' marker anywhere else), and the walk was
+        ;;    startup work for a folder that need not even exist on the
+        ;;    machine. Scanning is now manual:
+        ;;    `M-x projectile-discover-projects-in-search-path'.
+        projectile-auto-discover-projects nil
 
         ;; Honor projects forgotten on the welcome screen (`d'). This
         ;; predicate — NOT the builtin `projectile-ignored-projects'
         ;; option, whose path matching is broken for discovery; see
-        ;; welcome.el — keeps blocklisted projects out of auto-discovery
-        ;; and the find-file auto-add.
+        ;; welcome.el — keeps blocklisted projects out of a manual
+        ;; re-scan and of the find-file auto-add.
         projectile-ignored-project-function #'jmc-welcome-project-ignored-p)
   :config
   ;; Recognize bare Go modules (no VCS) as projects too.
@@ -130,26 +142,10 @@
   ;;    `projectile-project-root-files-bottom-up' instead.
   (add-to-list 'projectile-project-root-files ".envrc")
 
-  ;; Activate Projectile globally.
-  (projectile-mode 1)
-
-  ;; Re-scan the search path so newly created project directories are known
-  ;; without having been visited once. `projectile-auto-discover' only
-  ;; triggers discovery from interactive switch commands, so an explicit
-  ;; scan is still needed.
-  ;; -> DEFERRED to idle time: the scan walks ~/Projects three levels deep,
-  ;;    which was pure startup latency when run synchronously here.
-  ;; -> The welcome screen (welcome.el) lists projects from the live
-  ;;    `projectile-known-projects', so re-render it after the scan while
-  ;;    it is on display. Unconditionally: even when the scan found
-  ;;    nothing new, the screen may still be showing the pre-projectile
-  ;;    "still loading" placeholder from early startup.
-  (run-with-idle-timer
-   1 nil
-   (lambda ()
-     (projectile-discover-projects-in-search-path)
-     (when (fboundp 'jmc-welcome-refresh-visible)
-       (jmc-welcome-refresh-visible)))))
+  ;; Activate Projectile globally. The welcome screen hooks
+  ;; `projectile-mode-hook' to swap its "still loading" placeholder for
+  ;; the real project list (welcome.el).
+  (projectile-mode 1))
 
 ;; =============================================================================
 ;; PERSPECTIVE (PER-PROJECT WORKSPACES)
@@ -164,11 +160,10 @@
 (use-package perspective
   :init
   ;; Perspective refuses to enable unless a prefix key is set (or the
-  ;; warning is explicitly suppressed). "C-c p" is free here — Projectile's
-  ;; default map on that key was disabled above (`projectile-enable-keymap'
-  ;; nil), and all project actions live on `s-p' instead. This prefix gives
-  ;; access to the full perspective command set (s: switch, r: rename,
-  ;; c: kill, b: switch buffer in persp, ...).
+  ;; warning is explicitly suppressed). "C-c p" is free here: projectile
+  ;; binds no prefix by default, and all project actions live on `s-p'
+  ;; instead. This prefix gives access to the full perspective command set
+  ;; (s: switch, r: rename, c: kill, b: switch buffer in persp, ...).
   (setq persp-mode-prefix-key (kbd "C-c p"))
 
   ;; Mode-line: show only the CURRENT perspective's name, not the whole

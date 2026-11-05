@@ -30,14 +30,21 @@
 ;; VERSION CONTROL (MAGIT)
 ;; =============================================================================
 
+;; -> No `:after transient': magit requires transient itself and Elpaca
+;;    installs it as a dependency. The `:after' wrapped this whole block —
+;;    `:bind' included — in `eval-after-load' on transient, which nothing
+;;    loads at startup, so `C-x g' was "undefined" in a fresh session until
+;;    some other package (dirvish, docker, ...) happened to pull transient in.
 (use-package magit
-  :ensure t
-  :after transient
   :bind ("C-x g" . magit-status))
 
+;; -> `:demand t' together with `:after magit' loads forge AS SOON AS magit
+;;    loads. Without it the block only ran when `@' was pressed, so the
+;;    status buffer had no pull-request/issue sections and `auth-sources'
+;;    was untouched until then.
 (use-package forge
   :after magit
-  :ensure t
+  :demand t
   :bind (:map magit-mode-map ("@" . forge-dispatch))
   :config
   (setq auth-sources '("~/.authinfo.gpg")))
@@ -84,7 +91,6 @@
 ;; =============================================================================
 
 (use-package emmet-mode
-  :ensure t
   ;; `.css' opens in `css-ts-mode' (tree.el), which does NOT derive from
   ;; `css-mode', so a css-mode-only hook never fired for CSS files. `scss-mode'
   ;; still derives from css-mode and is covered by that entry.
@@ -107,7 +113,6 @@
       ".scalafmt.conf")))
 
 (use-package apheleia
-  :ensure t
   :diminish ""
   :config
   ;; --- 1. Define Custom Formatters ---
@@ -174,7 +179,6 @@
 ;; =============================================================================
 
 (use-package flycheck
-  :ensure t
   ;; This prog-mode hook is the SINGLE source of truth for enabling
   ;; flycheck: every programming mode in languages.el derives from
   ;; prog-mode, so the per-language `flycheck-mode' hook entries that used
@@ -221,9 +225,11 @@
     :modes fish-mode)
 
   ;; --- Registering Checkers ---
+  ;; (`rustic-clippy' is NOT registered here: rustic's own flycheck library
+  ;;  adds it when it loads, and before that the bare symbol is only an
+  ;;  entry flycheck skips over. The chain below still names it.)
   (add-to-list 'flycheck-checkers 'fish)
   (add-to-list 'flycheck-checkers 'sql-sqlint)
-  (add-to-list 'flycheck-checkers 'rustic-clippy)
 
   (setq flycheck-phpcs-standard "PSR12"))
 
@@ -280,7 +286,6 @@ used to append another `python-flake8' to the `lsp' chain."
 
 ;; --- Go ---
 (use-package flycheck-golangci-lint
-  :ensure t
   :defer t
   :after flycheck
   ;; Only go-ts-mode: `.go' files map there (languages.el); the go-mode
@@ -289,7 +294,6 @@ used to append another `python-flake8' to the `lsp' chain."
 
 ;; --- PHP ---
 (use-package flycheck-phpstan
-  :ensure t
   :after flycheck)
 
 (defun jmc-php-setup-h ()
@@ -333,7 +337,6 @@ used to append another `python-flake8' to the `lsp' chain."
 ;; =============================================================================
 
 (use-package quickrun
-  :ensure t
   :bind ("s-r" . quickrun))
 
 ;; (`package-lint' was declared here but never bound or called; removed.)

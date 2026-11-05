@@ -340,7 +340,8 @@
   ;; Update markers live as you type, not only after saving.
   (diff-hl-flydiff-mode 1)
   ;; Keep markers in sync with magit: refresh after commit/stage/revert.
-  (add-hook 'magit-pre-refresh-hook  #'diff-hl-magit-pre-refresh)
+  ;; (Only the post-refresh hook: `diff-hl-magit-pre-refresh' is obsolete
+  ;;  in diff-hl 1.11+ and does nothing.)
   (add-hook 'magit-post-refresh-hook #'diff-hl-magit-post-refresh))
 
 ;; Preview color values inline.
@@ -383,11 +384,16 @@
 ;; Add icons to minibuffer completion candidates.
 ;; -> Works with `marginalia` to show file-type icons during completion.
 ;; -> Replaces `all-the-icons-completion' with the nerd-icons equivalent.
+;; -> No `marginalia-mode-hook' entry: by the time this block runs
+;;    (`:after marginalia') that mode is already on and its hook has
+;;    already fired, so the hook never did anything. Calling the setup
+;;    directly in `:config' (i.e. right after the package loads) is what
+;;    actually wires the icons into marginalia.
 (use-package nerd-icons-completion
   :after (marginalia nerd-icons)
-  :hook (marginalia-mode . nerd-icons-completion-marginalia-setup)
-  :init
-  (nerd-icons-completion-mode))
+  :config
+  (nerd-icons-completion-mode)
+  (nerd-icons-completion-marginalia-setup))
 
 ;; NOTE: the `all-the-icons-dired' integration was REMOVED. Dirvish
 ;; (explorer.el) now renders its own icon column via the `nerd-icons'

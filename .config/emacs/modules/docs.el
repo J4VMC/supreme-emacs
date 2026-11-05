@@ -17,10 +17,10 @@
 ;;
 ;;; Code:
 
-;; Ensure required libraries are loaded for downloading and parsing XML feeds.
-(require 'url)
-(require 'seq)
-(require 'subr-x)
+;; No top-level `require's: `url-retrieve-synchronously' and `url-copy-file'
+;; are autoloaded (nothing touches the network until a docset is
+;; installed), and `seq-difference', `string-join' and `string-trim' are
+;; preloaded in Emacs 31.
 
 ;; =============================================================================
 ;; COMPILER DECLARATIONS (SILENCE WARNINGS)
@@ -83,16 +83,15 @@
 
 ;; `dash-docs` is the library that understands the internal structure of
 ;; Dash `.docset` folders (it reads the SQLite index inside them).
+;; -> `:defer t' with the two settings in `:init': nothing touches a docset
+;;    until `M-s d', yet this block used to load dash-docs and its whole
+;;    dependency chain (url, async, xml, ...) on every start just to set
+;;    these. The directory itself is created on first install, not here.
 (use-package dash-docs
-  :ensure t
-  :config
+  :defer t
+  :init
   ;; Define where the downloaded docsets will live on your hard drive.
   (setq dash-docs-docsets-path (expand-file-name "~/.docsets"))
-  
-  ;; Create the directory automatically if it is a fresh install.
-  (unless (file-exists-p dash-docs-docsets-path)
-    (make-directory dash-docs-docsets-path t))
-  
   ;; Tell dash-docs to render HTML pages using Emacs's built-in web browser (eww).
   (setq dash-docs-browser-func 'eww))
 
@@ -108,6 +107,8 @@
 For example, you can pass \"Python 3\" as the NAME."
   (let* ((underscored-name (replace-regexp-in-string " " "_" name))
          (feed-url (format "https://raw.githubusercontent.com/Kapeli/feeds/master/%s.xml" underscored-name)))
+    ;; Fresh install: the docsets directory is created here, lazily.
+    (make-directory dash-docs-docsets-path t)
     (condition-case err
         (let ((xml-buffer (url-retrieve-synchronously feed-url nil nil 10)))
           (if (not xml-buffer)
@@ -151,12 +152,14 @@ For example, you can pass \"Python 3\" as the NAME."
       (error (message "❌ Error installing %s: %s" name (error-message-string err))))))
 
 (defun jmc-docset--installed-list ()
-  "Return a list of docset names currently present in `~/.docsets`."
+  "Return a list of docset names currently present in `~/.docsets`.
+Empty when the directory does not exist yet (nothing installed)."
   (mapcar (lambda (d)
             (replace-regexp-in-string
              "_" " "
              (replace-regexp-in-string "\\.docset$" "" d)))
-          (directory-files dash-docs-docsets-path nil "\\.docset$")))
+          (and (file-directory-p dash-docs-docsets-path)
+               (directory-files dash-docs-docsets-path nil "\\.docset$"))))
 
 (defun jmc-docset--missing-list ()
   "Return a list of docsets mapped in `jmc-docset-map` but not installed."

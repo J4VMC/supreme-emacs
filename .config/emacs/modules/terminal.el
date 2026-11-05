@@ -8,11 +8,14 @@
 ;; It provides a snappy, modern terminal experience natively within Emacs.
 ;;
 ;; Key features:
-;; 1. "Quake-style" pop-up terminal at the bottom of the screen.
-;; 2. Intelligent project-root detection for automatic `cd` on launch.
+;; 1. "Quake-style" pop-up terminal in a half-width window on the right.
+;; 2. Intelligent project-root detection for automatic `cd` on launch
+;;    (`jmc-project-root', shared with debugger.el for dape's cwd).
 ;; 3. Multi-terminal support via prefix arguments.
 ;; 4. Force-kill functionality to bypass "Process is running" prompts.
-;; 5. Auto-kill buffers when the underlying shell process exits.
+;;
+;; Buffers whose shell exits are killed by ghostel itself
+;; (`ghostel-kill-buffer-on-exit', default t) — no sentinel is needed here.
 ;;
 ;;; Code:
 
@@ -23,6 +26,7 @@
 (defvar ghostel-eval-cmds)
 (defvar ghostel-mode-map)
 (defvar ghostel-semi-char-mode-map)
+(defvar ghostel-char-mode-map)
 
 (declare-function ghostel "ghostel")
 (declare-function projectile-project-root "projectile")
@@ -38,30 +42,6 @@
   ;; Tell Emacs to load the package the moment `ghostel` is called
   :commands (ghostel)
   :preface
-
-  ;; ===========================================================================
-  ;; CUSTOM PASTE LOGIC FOR CUA-MODE
-  ;; ===========================================================================
-
-  (defun jmc-ghostel-paste ()
-    "Send the current clipboard/kill-ring text to the Ghostel terminal.
-Uses ghostel's own send primitive when available, and wraps the text in
-BRACKETED-PASTE escapes so multiline pastes arrive as ONE block.
-Without the wrapping, the Claude Code TUI submits the message at the
-first raw newline, and fish executes each pasted line as it lands.
-\(Caveat: a program that never enabled bracketed paste would display
-the escape codes literally — fish, the Claude TUI, and modern REPLs
-all enable it.)"
-    (interactive)
-    (let* ((text (current-kill 0 t))
-           (bracketed (concat "\e[200~" text "\e[201~")))
-      (cond
-       ((fboundp 'ghostel-send-string)
-        (ghostel-send-string bracketed))
-       ((get-buffer-process (current-buffer))
-        (process-send-string (get-buffer-process (current-buffer)) bracketed))
-       (t
-        (error "No active process found for this Ghostel buffer")))))
 
   ;; ===========================================================================
   ;; CUSTOM "FORCE KILL" LOGIC
@@ -83,10 +63,13 @@ all enable it.)"
         (error "Buffer `%s` is already dead" buffer))))
 
   (defun jmc-ghostel-force-kill ()
-    "Silence the exit prompt and brutally kill the Ghostel buffer."
+    "Silence the exit prompt and brutally kill the Ghostel buffer.
+Also works on a terminal whose shell has already exited: the
+query-on-exit flag is only touched while there is a live process."
     (interactive)
     (let ((buffer (current-buffer)))
-      (set-process-query-on-exit-flag (get-buffer-process buffer) nil)
+      (when-let* ((proc (get-buffer-process buffer)))
+        (set-process-query-on-exit-flag proc nil))
       (jmc-kill-buffer-and-its-windows buffer)))
 
   ;; ===========================================================================
@@ -99,11 +82,12 @@ Projectile is this config's SINGLE source of truth for project
 boundaries — it knows the extra root markers registered in projects.el
 (`.envrc', `go.mod'). The old version consulted project.el first, which
 could resolve a different root than the `s-p' commands for the very
-same buffer."
+same buffer. debugger.el uses this same function for dape's cwd, so the
+terminal and the debugger always agree on the root."
     (or
      (when (fboundp 'projectile-project-root)
        (projectile-project-root))
-     (when-let ((git-dir (locate-dominating-file default-directory ".git")))
+     (when-let* ((git-dir (locate-dominating-file default-directory ".git")))
        (expand-file-name git-dir))
      default-directory))
 
@@ -113,7 +97,9 @@ same buffer."
 
   (defun jmc-ghostel-toggle (&optional arg)
     "Toggle a Quake-style Ghostel terminal in the project root.
-With prefix ARG (C-u), create a new separate terminal buffer."
+With prefix ARG (C-u), create a new separate terminal buffer. If a
+Ghostel window is already visible, the new terminal opens beside it
+(the window is split) instead of replacing it."
     (interactive "P")
     (let* ((default-directory (jmc-project-root))
            (proj-name (file-name-nondirectory (directory-file-name default-directory)))
@@ -127,89 +113,94 @@ With prefix ARG (C-u), create a new separate terminal buffer."
           (delete-window (get-buffer-window buf))
         (unless buf
           (require 'ghostel)
+          ;; -> `ghostel' looks up an existing terminal by IDENTITY (slot),
+          ;;    not by buffer name, so a plain (ghostel) returns the live
+          ;;    terminal we already renamed and we would rename it AGAIN:
+          ;;    C-u s-9 then showed one buffer in two mirrored windows (and
+          ;;    a second project's s-9 stole the first project's terminal).
+          ;;    A non-nil arg makes it always create a fresh instance.
           (save-window-excursion
-            (with-current-buffer (ghostel)
+            (with-current-buffer (ghostel t)
               (rename-buffer buf-name t)))
           (setq buf (get-buffer buf-name)))
-        (pop-to-buffer buf))))
+        ;; -> The `display-buffer-alist' rule below ("^\\*ghostel", in
+        ;;    direction right, reuse window) hands a NEW terminal the window
+        ;;    the first one already occupies, so C-u s-9 silently swapped
+        ;;    the buffers instead of adding a second pane. With a prefix
+        ;;    arg and a visible terminal, split that window ourselves.
+        (let ((term-win (and arg
+                             (seq-find (lambda (w)
+                                         (string-prefix-p "*ghostel" (buffer-name (window-buffer w))))
+                                       (window-list)))))
+          (if term-win
+              (let ((new-win (split-window term-win nil 'right)))
+                (set-window-buffer new-win buf)
+                (set-window-dedicated-p new-win t)
+                (select-window new-win))
+            (pop-to-buffer buf))))))
 
   ;; ===========================================================================
   ;; KEYBINDINGS
   ;; ===========================================================================
   ;;
-  ;; PASTE ROUTING — why these are command REMAPS, not key bindings:
+  ;; PASTE ROUTING — why `cua-paste' is REMAPPED instead of `C-v' rebound:
   ;; CUA installs its keys (C-v = `cua-paste') through Emacs's EMULATION
   ;; keymap layer, which outranks every minor- and major-mode map. A plain
-  ;; ("C-v" . jmc-ghostel-paste) here can therefore NEVER fire — C-v always
+  ;; ("C-v" . ghostel-yank) here can therefore NEVER fire — C-v always
   ;; resolved to `cua-paste', which yanked into the BUFFER instead of
   ;; sending to the shell process. Command remapping, however, is consulted
   ;; across all active keymaps AFTER the key resolves to a command, so
   ;; remapping `cua-paste' wins where shadowing the key lost.
-  ;; -> [remap cua-paste] catches CUA's C-v.
-  ;; -> [remap yank] catches macOS Cmd-V (`s-v' is globally bound to
-  ;;    `yank' by the NS port) and C-y in one stroke.
-  ;; Both maps get the remaps so paste works regardless of which ghostel
-  ;; input mode is active.
+  ;; -> The target is ghostel's own `ghostel-yank' (this config used to
+  ;;    ship its own paste command, which wrapped EVERY paste in bracketed
+  ;;    paste escapes; `ghostel-yank' only does so when the running program
+  ;;    enabled bracketed paste — fish, the Claude TUI and modern REPLs
+  ;;    do — so multi-line pastes still arrive as ONE block there and a
+  ;;    program that didn't enable it never sees raw escape codes).
+  ;; -> ghostel already remaps `yank' to `ghostel-yank' in its semi-char,
+  ;;    char and read-only maps, which covers `C-y' and macOS Cmd-V (`s-v'
+  ;;    is globally `yank' in the NS port); the explicit `s-v' below only
+  ;;    makes the binding visible to `C-h k' and which-key.
+  ;; -> `ghostel-mode-map' is the parent of the semi-char and read-only
+  ;;    maps. The char-mode map (Claude Code IDE sessions run in char mode
+  ;;    for TUI fidelity) has NO parent, so it gets the `cua-paste' remap
+  ;;    separately; Cmd-V there already works through ghostel's own remap.
   :bind ((:map ghostel-mode-map
                ("M-k" . jmc-ghostel-force-kill)
-               ("s-v" . jmc-ghostel-paste)
-               ([remap cua-paste] . jmc-ghostel-paste)
-               ([remap yank] . jmc-ghostel-paste))
+               ("s-v" . ghostel-yank)
+               ([remap cua-paste] . ghostel-yank))
          (:map ghostel-semi-char-mode-map
                ;; Bound here too so the shell can't swallow these keys
                ;; while the active-typing mode's map has precedence.
-               ("M-k" . jmc-ghostel-force-kill)
-               ("s-v" . jmc-ghostel-paste)
-               ([remap cua-paste] . jmc-ghostel-paste)
-               ([remap yank] . jmc-ghostel-paste)))
+               ("M-k" . jmc-ghostel-force-kill))
+         (:map ghostel-char-mode-map
+               ([remap cua-paste] . ghostel-yank)))
 
   :config
-  ;; --- Paste coverage for RAW/char input mode (Claude Code IDE) ---------
-  ;; The Claude Code IDE session runs its ghostel buffer in raw "char"
-  ;; input mode for TUI fidelity. In that mode, ghostel's char-mode keymap
-  ;; intercepts keys AS KEYS — Cmd-V never resolves to `yank' at all, so
-  ;; the [remap yank] entries above are never consulted. The cure is a
-  ;; DIRECT `s-v' binding (plus the remaps, for completeness) in the same
-  ;; high-precedence maps doing the intercepting. Guarded with `boundp'
-  ;; since the exact map names depend on the installed ghostel version;
-  ;; if paste still fails in a Claude buffer, run `C-h k' + Cmd-V there —
-  ;; it names the intercepting command and its keymap.
-  (dolist (map-sym '(ghostel-char-mode-map ghostel-semi-char-mode-map))
-    (when (boundp map-sym)
-      (let ((map (symbol-value map-sym)))
-        (define-key map (kbd "s-v") #'jmc-ghostel-paste)
-        (define-key map [remap yank] #'jmc-ghostel-paste)
-        (define-key map [remap cua-paste] #'jmc-ghostel-paste))))
   ;; --- Directory & File Integration ---
-  ;; Whitelist Emacs functions your shell can call directly.
-  (setq ghostel-eval-cmds '(find-file message dired ediff-files))
+  ;; Whitelist Emacs functions the shell can call through ghostel's OSC
+  ;; "eval" hook. The shape is (("name-sent-by-the-shell" FUNCTION) ...):
+  ;; ghostel looks the string up with `assoc', so a bare list of symbols
+  ;; (what this used to be) made every call fail as "unknown eval command".
+  ;; Added on top of the defaults (`find-file-other-window',
+  ;; `dired-other-window', ...), not replacing them.
+  (add-to-list 'ghostel-eval-cmds '("ediff-files" ediff-files))
 
   ;; --- Window Placement Rules ---
-  ;; This tells Emacs: "If it's a ghostel buffer, pop it up at the right
-  ;; and make it take up exactly 50% of the screen height."
+  ;; A ghostel buffer pops up in a new window on the RIGHT, half the frame
+  ;; wide. Only `window-width' applies to a sideways split — a
+  ;; `window-height' entry here would be inert. (ai.el's claude-code-ide
+  ;; window is a right side window too, sized in columns.)
   (add-to-list 'display-buffer-alist
                '("^\\*ghostel"
                  (display-buffer-reuse-window display-buffer-in-direction)
                  (direction . right)
                  (dedicated . t)
                  (reusable-frames . visible)
-                 (window-height . 0.5)
                  (window-width . 0.5)))
 
   ;; Make URLs and file paths inside the terminal clickable.
-  (add-hook 'ghostel-mode-hook #'goto-address-mode)
-
-  ;; --- Auto-Kill on Exit ---
-  ;; Attach a process sentinel. When you type `exit` in the shell, this spots
-  ;; the "finished" event and cleanly kills the buffer behind it.
-  (add-hook 'ghostel-mode-hook
-            (lambda ()
-              (let ((proc (get-buffer-process (current-buffer))))
-                (when proc
-                  (set-process-sentinel proc
-                                        (lambda (process event)
-                                          (when (string-match-p "finished\\|exited" event)
-                                            (kill-buffer (process-buffer process))))))))))
+  (add-hook 'ghostel-mode-hook #'goto-address-mode))
 
 ;; =============================================================================
 ;; GLOBAL CONTROLS

@@ -27,8 +27,6 @@
 ;; COMPILER DECLARATIONS (SILENCE WARNINGS)
 ;; =============================================================================
 
-(defvar combobulate-key-prefix)
-
 ;; =============================================================================
 ;; CORE TREE-SITTER SETUP (TREESIT)
 ;; =============================================================================
@@ -126,16 +124,18 @@ registers all of them."
   ;;    The old clone directory can be deleted once this builds.
   :ensure (:host github :repo "mickeynp/combobulate")
   ;; Activate combobulate in common Tree-sitter modes.
-  :hook ((python-ts-mode     . combobulate-mode)
-         (js-ts-mode         . combobulate-mode)
-         (tsx-ts-mode        . combobulate-mode)
-         (typescript-ts-mode . combobulate-mode))
-  :config
-  ;; Set the command prefix to `C-c o`.
+  ;; The command prefix is `C-c o' — combobulate's default
+  ;; (`combobulate-key-prefix'), left as is. The prefix is read when the
+  ;; keymap is built at load time, so a `setq' in `:config' (what used to
+  ;; be here) came too late to change it anyway; use `:custom' if it ever
+  ;; has to move.
   ;; -> e.g., `C-c o n` moves the cursor to the next logical code node.
   ;; -> No conflict with oil anymore: explorer.el moved `oil-open` to
   ;;    `C-c O`, so this prefix is unambiguously combobulate's.
-  (setq combobulate-key-prefix "C-c o"))
+  :hook ((python-ts-mode     . combobulate-mode)
+         (js-ts-mode         . combobulate-mode)
+         (tsx-ts-mode        . combobulate-mode)
+         (typescript-ts-mode . combobulate-mode)))
 
 ;; =============================================================================
 ;; CODE FOLDING (HIDESHOW)

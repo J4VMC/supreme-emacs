@@ -40,22 +40,14 @@
 ;; =============================================================================
 
 (defvar js-indent-level)
-(defvar typescript-ts-mode-indent-offset)
+(defvar typescript-ts-indent-offset)
 (defvar web-mode-markup-indent-offset)
 (defvar web-mode-css-indent-offset)
 (defvar web-mode-code-indent-offset)
-(defvar python-mode-map)
-(defvar python-ts-mode-map)
+(defvar python-base-mode-map)
 (defvar rustic-mode-map)
 (defvar rustic-format-on-save)
 (defvar rustic-lsp-client)
-(defvar rustic-use-tree-sitter)
-(defvar rustic-flycheck-checker)
-(defvar rustic-analyzer-proc-macro-enable)
-(defvar rustic-display-inlay-hints)
-(defvar rustic-analyzer-display-chaining-hints)
-(defvar rustic-analyzer-display-closure-return-type-hints)
-(defvar rustic-analyzer-display-lifetime-elision-hints-enable)
 (defvar sbt:program-options)
 (defvar csv-mode-map)
 (defvar markdown-fontify-code-blocks-natively)
@@ -139,8 +131,10 @@
          ("\\.jsx\\'" . tsx-ts-mode))
   :init
   ;; Standardize 2-space indentation for the entire JS/TS ecosystem.
-  (setq typescript-ts-mode-indent-offset 2 ; typescript-ts-mode & tsx-ts-mode
-        js-indent-level 2)                 ; js-ts-mode
+  ;; (`typescript-ts-indent-offset' is the Emacs 31 name; the old
+  ;;  `typescript-ts-mode-indent-offset' is an obsolete alias.)
+  (setq typescript-ts-indent-offset 2 ; typescript-ts-mode & tsx-ts-mode
+        js-indent-level 2)            ; js-ts-mode
   :hook ((typescript-ts-mode . lsp-deferred)
 
          (tsx-ts-mode . lsp-deferred)
@@ -175,9 +169,15 @@
 
          ;; --- SVELTE HOOKS ---
          (svelte-mode . lsp-deferred)
+         ;; `bound-and-true-p': `add-hook' PREPENDS, so this lambda runs
+         ;; BEFORE the `lsp-deferred' entry above it, i.e. possibly before
+         ;; lsp-mode has ever loaded. Reading the bare variable then
+         ;; signalled void-variable in the first .svelte buffer of a
+         ;; session and aborted the rest of the hook, LSP included.
          (svelte-mode . (lambda ()
                           (setq-local indent-tabs-mode nil)
-                          (setq-local lsp-disabled-clients (append lsp-disabled-clients '(eslint)))))
+                          (setq-local lsp-disabled-clients
+                                      (append (bound-and-true-p lsp-disabled-clients) '(eslint)))))
 
          ;; --- VUE HOOKS ---
          (vue-mode . lsp-deferred)
@@ -223,7 +223,7 @@
   ;; the local .venv python itself via `jmc-python-venv-bin`.
   :preface
   ;; --- Custom Python Helpers ---
-  (defun python-flask-run ()
+  (defun jmc-python-flask-run ()
     "Search for project root and launch a Flask development server."
     (interactive)
     (let* ((default-directory (projectile-project-root))
@@ -232,14 +232,14 @@
       (setenv "FLASK_ENV" "development")
       (compile "flask run")))
 
-  (defun python-add-breakpoint ()
+  (defun jmc-python-add-breakpoint ()
     "Quickly insert a `breakpoint()` call at the current line."
     (interactive)
     (end-of-line)
     (newline-and-indent)
     (insert "breakpoint()  # FIXME: Remove this"))
 
-  (defun python-remove-all-breakpoints ()
+  (defun jmc-python-remove-all-breakpoints ()
     "Scan the buffer and delete all lines containing `breakpoint()`."
     (interactive)
     (save-excursion
@@ -254,14 +254,14 @@
   ;; C-c b   -> Add Breakpoint
   ;; C-c B   -> Remove all Breakpoints
   ;;
-  ;; IMPORTANT: bind on BOTH keymaps. `python-ts-mode-map` is created via
-  ;; `(copy-keymap python-mode-map)` at load time (verified in Emacs 30
-  ;; python.el) — a COPY, not a parent — so keys added only to
-  ;; `python-mode-map` never reach the ts buffers our files actually open in.
-  (dolist (map (list python-mode-map python-ts-mode-map))
-    (define-key map (kbd "C-c ! f") #'python-flask-run)
-    (define-key map (kbd "C-c b") #'python-add-breakpoint)
-    (define-key map (kbd "C-c B") #'python-remove-all-breakpoints)))
+  ;; Bound on `python-base-mode-map': in Emacs 31 both `python-mode-map'
+  ;; and `python-ts-mode-map' are composed keymaps whose parent it is, so
+  ;; one binding reaches the ts buffers our files open in as well as the
+  ;; legacy mode. (Emacs 30 built `python-ts-mode-map' as a COPY, which is
+  ;; why this used to loop over both maps.)
+  (define-key python-base-mode-map (kbd "C-c ! f") #'jmc-python-flask-run)
+  (define-key python-base-mode-map (kbd "C-c b") #'jmc-python-add-breakpoint)
+  (define-key python-base-mode-map (kbd "C-c B") #'jmc-python-remove-all-breakpoints))
 
 ;; --- Environment & Project Management ---
 
@@ -274,6 +274,15 @@
     (unless (string-equal (getenv "VIRTUAL_ENV") venv-path)
       (pyvenv-activate venv-path))))
 
+(defun jmc-pyvenv-enable-h ()
+  "Enable the GLOBAL `pyvenv-mode' once, from the first Python buffer.
+It is a global minor mode, so re-running it from every Python buffer
+\(what the old hook did) was pure overhead; the hook removes itself.
+Still a hook rather than a startup call so pyvenv stays unloaded in
+sessions that never open Python."
+  (pyvenv-mode 1)
+  (remove-hook 'python-base-mode-hook #'jmc-pyvenv-enable-h))
+
 (use-package pyvenv
   :defer t
   :init
@@ -281,7 +290,7 @@
   ;; python-ts-mode run. The old hooks were on `python-mode-hook`, which
   ;; python-ts-mode does NOT run (it derives from python-base-mode) — so
   ;; venv auto-activation never fired when simply opening a Python file.
-  (add-hook 'python-base-mode-hook #'pyvenv-mode)
+  (add-hook 'python-base-mode-hook #'jmc-pyvenv-enable-h)
   (add-hook 'python-base-mode-hook #'jmc-python-venv-autoload-h)
   (add-hook 'projectile-after-switch-project-hook #'jmc-python-venv-autoload-h))
 
@@ -339,9 +348,12 @@
 ;; RUST (VIA RUSTIC)
 ;; =============================================================================
 
+;; -> No `lsp-deferred' hook here: with `rustic-lsp-client' set to
+;;    lsp-mode (below), rustic's own `rustic-setup-lsp' on
+;;    `rustic-mode-hook' starts the client, so a second hook only ran
+;;    `lsp-deferred' twice per buffer.
 (use-package rustic
   :mode ("\\.rs\\'" . rustic-mode)
-  :hook ((rustic-mode . lsp-deferred))
   :bind (:map rustic-mode-map
               ("C-c C-c l" . flycheck-list-errors)
               ("C-c C-c a" . lsp-execute-code-action)
@@ -367,17 +379,10 @@
   :config
   ;; Disable rustic's default formatter in favor of global `apheleia-mode`.
   (setq rustic-format-on-save nil)
-  (setq rustic-lsp-client 'lsp-mode)
-  (setq rustic-use-tree-sitter t)
-  ;; Use `clippy` for deeper code analysis and linting.
-  (setq rustic-flycheck-checker 'rustic-clippy)
-
-  ;; --- Inlay Hints (Visual Type Annotations) ---
-  (setq rustic-analyzer-proc-macro-enable t)
-  (setq rustic-display-inlay-hints t)
-  (setq rustic-analyzer-display-chaining-hints t)
-  (setq rustic-analyzer-display-closure-return-type-hints t)
-  (setq rustic-analyzer-display-lifetime-elision-hints-enable "skip_trivial"))
+  (setq rustic-lsp-client 'lsp-mode))
+;; rust-analyzer behaviour (clippy as the checker, inlay hints) is
+;; configured through the `lsp-rust-analyzer-*' options in lang-server.el;
+;; rustic has no settings of its own for those.
 
 ;; Cargo: Minor mode for Rust's build system and dependency manager.
 (use-package cargo
@@ -429,7 +434,9 @@
 (use-package sql
   :ensure nil ; Built-in
   :mode ("\\.sql\\'" . sql-mode)
-  :bind (:map sql-mode-map ("C-c C-d" . sql-connect))
+  ;; No `C-c C-d' -> `sql-connect' binding: dev.el starts LSP in every SQL
+  ;; buffer and lsp-ui owns `C-c C-d' in `lsp-mode-map', which outranks the
+  ;; major-mode map (same reason rustic avoids the key). `M-x sql-connect'.
   :config
   (setq sql-product 'postgres))
 
@@ -475,10 +482,12 @@
 
 (use-package csv-mode
   :mode ("\\.csv\\'" . csv-mode)
+  ;; csv-mode's movement commands are `csv-forward-field' /
+  ;; `csv-backward-field' (there is no `csv-next-field').
   :bind (:map csv-mode-map
-              ("TAB" . csv-next-field)
-              ("<tab>" . csv-next-field)
-              ("<backtab>" . csv-previous-field)))
+              ("TAB" . csv-forward-field)
+              ("<tab>" . csv-forward-field)
+              ("<backtab>" . csv-backward-field)))
 
 ;; XML: there is NO `xml-ts-mode` in Emacs (verified) — use the excellent
 ;; built-in `nxml-mode` instead (schema-aware validation, smart completion).
@@ -581,7 +590,7 @@ the preview."
     (when jmc-markdown-preview--timer
       (cancel-timer jmc-markdown-preview--timer)
       (setq jmc-markdown-preview--timer nil))
-    (when-let ((buffer (get-buffer jmc-markdown-preview-buffer)))
+    (when-let* ((buffer (get-buffer jmc-markdown-preview-buffer)))
       (kill-buffer buffer)))
   :config
   (setq markdown-fontify-code-blocks-natively t)
